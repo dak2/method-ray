@@ -1,1 +1,19 @@
-../Cargo.toml
+[package]
+name = "methodray"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"] 
+name = "methodray"
+path = "src/lib.rs"
+
+[dependencies]
+rayon = "1.10"
+walkdir = "2.5"
+magnus = "0.8"
+anyhow = "1.0"
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3.13"
