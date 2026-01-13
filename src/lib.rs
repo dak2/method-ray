@@ -1,7 +1,9 @@
 use magnus::{function, method, prelude::*, Error, Ruby};
 
-// Phase 0: 基本的なFFIバインディングのみ
-// Phase 1でscannerモジュールを追加予定
+mod types;
+mod parser;
+
+// Phase 1: 型推論・メソッド探索機能実装中
 
 #[magnus::wrap(class = "MethodRay::Analyzer")]
 struct Analyzer {
