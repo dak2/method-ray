@@ -57,7 +57,10 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::Check { file, verbose } => {
             if let Some(file_path) = file {
-                check_single_file(&file_path, verbose)?;
+                let success = check_single_file(&file_path, verbose)?;
+                if !success {
+                    std::process::exit(1);
+                }
             } else {
                 check_project(verbose)?;
             }
@@ -76,7 +79,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn check_single_file(file_path: &PathBuf, verbose: bool) -> Result<()> {
+fn check_single_file(file_path: &PathBuf, verbose: bool) -> Result<bool> {
     let checker = FileChecker::new()?;
     let diagnostics = checker.check_file(file_path)?;
 
@@ -84,23 +87,19 @@ fn check_single_file(file_path: &PathBuf, verbose: bool) -> Result<()> {
         if verbose {
             println!("{}: No errors found", file_path.display());
         }
-        Ok(())
+        Ok(true) // No errors
     } else {
         // Use format_diagnostics_with_file for code snippet display
         let output = diagnostics::format_diagnostics_with_file(&diagnostics, file_path);
 
         println!("{}", output);
 
-        // Exit with error code if there are any errors
+        // Check if there are any errors
         let has_errors = diagnostics
             .iter()
             .any(|d| d.level == diagnostics::DiagnosticLevel::Error);
 
-        if has_errors {
-            std::process::exit(1);
-        }
-
-        Ok(())
+        Ok(!has_errors) // Return true if no errors (only warnings)
     }
 }
 
@@ -125,7 +124,13 @@ fn watch_file(file_path: &PathBuf) -> Result<()> {
 
     // Initial check
     println!("Initial check:");
-    check_single_file(file_path, false)?;
+    let mut had_errors = match check_single_file(file_path, true) {
+        Ok(success) => !success,
+        Err(e) => {
+            eprintln!("Error during initial check: {}", e);
+            true
+        }
+    };
     println!();
 
     // Setup file watcher
@@ -154,10 +159,24 @@ fn watch_file(file_path: &PathBuf) -> Result<()> {
                     // Small delay to ensure file is fully written
                     std::thread::sleep(Duration::from_millis(100));
 
-                    match check_single_file(file_path, false) {
-                        Ok(_) => {},
+                    match check_single_file(file_path, true) {
+                        Ok(success) => {
+                            if success && had_errors {
+                                // Errors were fixed
+                                println!("✓ All errors fixed!");
+                                had_errors = false;
+                            } else if !success && !had_errors {
+                                // New errors appeared
+                                had_errors = true;
+                            } else if success && !had_errors {
+                                // Still no errors
+                                // Message already printed by check_single_file with verbose=true
+                            }
+                            // If still has errors (had_errors && !success), no additional message needed
+                        }
                         Err(e) => {
                             eprintln!("Error during check: {}", e);
+                            had_errors = true;
                         }
                     }
                     println!();
