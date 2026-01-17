@@ -101,6 +101,7 @@ fn collect_diagnostics(genv: &GlobalEnv, file_path: &Path) -> Vec<Diagnostic> {
                 file: PathBuf::from(file_path),
                 line: source_loc.line,
                 column: source_loc.column,
+                length: Some(source_loc.length),
             }
         } else {
             // Fallback to placeholder
@@ -108,6 +109,7 @@ fn collect_diagnostics(genv: &GlobalEnv, file_path: &Path) -> Vec<Diagnostic> {
                 file: PathBuf::from(file_path),
                 line: 1,
                 column: 1,
+                length: None,
             }
         };
 

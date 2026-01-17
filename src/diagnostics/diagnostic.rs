@@ -22,6 +22,7 @@ pub struct Location {
     pub file: PathBuf,
     pub line: usize,
     pub column: usize,
+    pub length: Option<usize>, // Character length of the error span
 }
 
 /// Type checking diagnostic
@@ -96,6 +97,7 @@ mod tests {
             file: PathBuf::from("test.rb"),
             line: 10,
             column: 5,
+            length: None,
         };
 
         let diag = Diagnostic::undefined_method(loc.clone(), "Integer", "upcase");
@@ -109,6 +111,7 @@ mod tests {
             file: PathBuf::from("test.rb"),
             line: 15,
             column: 3,
+            length: None,
         };
 
         let diag = Diagnostic::union_partial_error(
