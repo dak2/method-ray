@@ -1,18 +1,16 @@
 require_relative "lib/methodray/version"
 
 Gem::Specification.new do |spec|
-  spec.name          = "methodray"
+  spec.name          = "method-ray"
   spec.version       = MethodRay::VERSION
   spec.authors       = ["dak2"]
   spec.email         = [""]
 
-  spec.summary       = "MethodRay is a fast static analysis tool for Ruby methods."
+  spec.summary       = "Method-Ray is a fast static analysis tool for Ruby methods."
   spec.description   = <<~EOD
-    Basically, MethodRay performs a type analysis of unannotated Ruby code.
-
-    This gem analyzes method definitions statically to prevent `NoMethodError` at runtime.
+    Method-Ray is a static analysis tool that checks the callability of methods in Ruby code.
   EOD
-  spec.homepage      = "https://github.com/dak2/methodray"
+  spec.homepage      = "https://github.com/dak2/method-ray"
   spec.license       = "MIT"
   spec.required_ruby_version = ">= 3.4"
 
