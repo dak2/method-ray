@@ -1,3 +1,4 @@
+use crate::env::scope::{Scope, ScopeId, ScopeKind, ScopeManager};
 use crate::graph::{BoxId, BoxTrait, ChangeSet, EdgeUpdate, Source, Vertex, VertexId};
 use crate::source_map::SourceLocation;
 use crate::types::Type;
@@ -34,6 +35,9 @@ pub struct GlobalEnv {
     /// Type errors collected during analysis
     pub type_errors: Vec<TypeError>,
 
+    /// Scope management
+    pub scope_manager: ScopeManager,
+
     /// ID generation
     next_vertex_id: usize,
     pub next_box_id: usize,
@@ -49,6 +53,7 @@ impl GlobalEnv {
             run_queue_set: HashSet::new(),
             methods: HashMap::new(),
             type_errors: Vec::new(),
+            scope_manager: ScopeManager::new(),
             next_vertex_id: 0,
             next_box_id: 0,
         }
@@ -209,6 +214,44 @@ impl GlobalEnv {
         }
 
         lines.join("\n")
+    }
+
+    // Scope-related helper methods
+
+    /// Enter a class scope
+    pub fn enter_class(&mut self, name: String) -> ScopeId {
+        let scope_id = self.scope_manager.new_scope(ScopeKind::Class {
+            name,
+            superclass: None,
+        });
+        self.scope_manager.enter_scope(scope_id);
+        scope_id
+    }
+
+    /// Enter a method scope
+    pub fn enter_method(&mut self, name: String) -> ScopeId {
+        let class_name = self.scope_manager.current_class_name();
+        let scope_id = self.scope_manager.new_scope(ScopeKind::Method {
+            name,
+            receiver_type: class_name,
+        });
+        self.scope_manager.enter_scope(scope_id);
+        scope_id
+    }
+
+    /// Exit current scope
+    pub fn exit_scope(&mut self) {
+        self.scope_manager.exit_scope();
+    }
+
+    /// Get current scope
+    pub fn current_scope(&self) -> &Scope {
+        self.scope_manager.current_scope()
+    }
+
+    /// Get current scope mutably
+    pub fn current_scope_mut(&mut self) -> &mut Scope {
+        self.scope_manager.current_scope_mut()
     }
 }
 
