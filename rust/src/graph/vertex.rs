@@ -41,7 +41,11 @@ impl Vertex {
 
     /// Add type (core of type propagation)
     /// Returns: list of newly added types and destinations to propagate to
-    pub fn on_type_added(&mut self, src_id: VertexId, added_types: Vec<Type>) -> Vec<(VertexId, Vec<Type>)> {
+    pub fn on_type_added(
+        &mut self,
+        src_id: VertexId,
+        added_types: Vec<Type>,
+    ) -> Vec<(VertexId, Vec<Type>)> {
         let mut new_added_types = Vec::new();
 
         for ty in added_types {

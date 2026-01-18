@@ -187,6 +187,9 @@ mod tests {
         manager.add_edge(src1, vtx);
         manager.add_edge(src2, vtx);
 
-        assert_eq!(manager.get_vertex(vtx).unwrap().show(), "(Integer | String)");
+        assert_eq!(
+            manager.get_vertex(vtx).unwrap().show(),
+            "(Integer | String)"
+        );
     }
 }

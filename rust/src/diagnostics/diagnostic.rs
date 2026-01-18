@@ -59,17 +59,10 @@ impl Diagnostic {
     }
 
     /// Create undefined method error
-    pub fn undefined_method(
-        location: Location,
-        receiver_type: &str,
-        method_name: &str,
-    ) -> Self {
+    pub fn undefined_method(location: Location, receiver_type: &str, method_name: &str) -> Self {
         Self::error(
             location,
-            format!(
-                "undefined method `{}` for {}",
-                method_name, receiver_type
-            ),
+            format!("undefined method `{}` for {}", method_name, receiver_type),
         )
     }
 

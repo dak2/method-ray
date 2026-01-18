@@ -38,11 +38,7 @@ pub enum NeedsChildKind<'a> {
 }
 
 /// First pass: check if node can be handled immediately without child processing
-pub fn dispatch_simple(
-    genv: &mut GlobalEnv,
-    lenv: &mut LocalEnv,
-    node: &Node,
-) -> DispatchResult {
+pub fn dispatch_simple(genv: &mut GlobalEnv, lenv: &mut LocalEnv, node: &Node) -> DispatchResult {
     // Instance variable read: @name
     if let Some(ivar_read) = node.as_instance_variable_read_node() {
         let ivar_name = String::from_utf8_lossy(ivar_read.name().as_slice()).to_string();

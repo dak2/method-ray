@@ -97,11 +97,7 @@ mod tests {
         let mut genv = GlobalEnv::new();
 
         // Register String#upcase
-        genv.register_builtin_method(
-            Type::string(),
-            "upcase",
-            Type::string(),
-        );
+        genv.register_builtin_method(Type::string(), "upcase", Type::string());
 
         // x = "hello" (Source<String> -> Vertex)
         let x_vtx = genv.new_vertex();

@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::graph::VertexId;
+use std::collections::HashMap;
 
 /// スコープID
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -87,11 +87,7 @@ pub struct ScopeManager {
 #[allow(dead_code)]
 impl ScopeManager {
     pub fn new() -> Self {
-        let top_level = Scope::new(
-            ScopeId(0),
-            ScopeKind::TopLevel,
-            None,
-        );
+        let top_level = Scope::new(ScopeId(0), ScopeKind::TopLevel, None);
 
         let mut scopes = HashMap::new();
         scopes.insert(ScopeId(0), top_level);
@@ -276,7 +272,8 @@ mod tests {
     fn test_scope_manager_local_var() {
         let mut sm = ScopeManager::new();
 
-        sm.current_scope_mut().set_local_var("x".to_string(), VertexId(10));
+        sm.current_scope_mut()
+            .set_local_var("x".to_string(), VertexId(10));
 
         assert_eq!(sm.lookup_var("x"), Some(VertexId(10)));
         assert_eq!(sm.lookup_var("y"), None);
@@ -287,7 +284,8 @@ mod tests {
         let mut sm = ScopeManager::new();
 
         // Top level: x = 10
-        sm.current_scope_mut().set_local_var("x".to_string(), VertexId(10));
+        sm.current_scope_mut()
+            .set_local_var("x".to_string(), VertexId(10));
 
         // Enter class
         let class_id = sm.new_scope(ScopeKind::Class {
@@ -297,7 +295,8 @@ mod tests {
         sm.enter_scope(class_id);
 
         // Class level: y = 20
-        sm.current_scope_mut().set_local_var("y".to_string(), VertexId(20));
+        sm.current_scope_mut()
+            .set_local_var("y".to_string(), VertexId(20));
 
         // Can lookup both x (from parent) and y (from current)
         assert_eq!(sm.lookup_var("x"), Some(VertexId(10)));

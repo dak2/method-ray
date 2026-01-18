@@ -40,7 +40,10 @@ mod tests {
         let mut genv = GlobalEnv::new();
 
         install_class(&mut genv, "User".to_string());
-        assert_eq!(genv.scope_manager.current_class_name(), Some("User".to_string()));
+        assert_eq!(
+            genv.scope_manager.current_class_name(),
+            Some("User".to_string())
+        );
 
         exit_scope(&mut genv);
         assert_eq!(genv.scope_manager.current_class_name(), None);
@@ -54,7 +57,10 @@ mod tests {
         install_method(&mut genv, "greet".to_string());
 
         // Still in User class context
-        assert_eq!(genv.scope_manager.current_class_name(), Some("User".to_string()));
+        assert_eq!(
+            genv.scope_manager.current_class_name(),
+            Some("User".to_string())
+        );
 
         exit_scope(&mut genv); // exit method
         exit_scope(&mut genv); // exit class

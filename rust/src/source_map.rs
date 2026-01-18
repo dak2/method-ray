@@ -42,10 +42,7 @@ impl SourceLocation {
 
     /// Create from ruby-prism Location and source code
     /// Calculates line/column from byte offset
-    pub fn from_prism_location_with_source(
-        location: &ruby_prism::Location,
-        source: &str,
-    ) -> Self {
+    pub fn from_prism_location_with_source(location: &ruby_prism::Location, source: &str) -> Self {
         let start_offset = location.start_offset();
         let length = location.end_offset() - start_offset;
 

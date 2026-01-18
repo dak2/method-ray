@@ -1,12 +1,12 @@
+use anyhow::Context;
+use std::collections::HashMap;
+use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
-use std::collections::HashMap;
-use tokio::sync::RwLock;
-use anyhow::Context;
 
-use crate::checker::FileChecker;
 use super::diagnostics::to_lsp_diagnostic;
+use crate::checker::FileChecker;
 
 pub struct MethodRayServer {
     client: Client,
@@ -33,10 +33,7 @@ impl MethodRayServer {
                 }
                 Err(e) => {
                     self.client
-                        .log_message(
-                            MessageType::ERROR,
-                            format!("Type check failed: {}", e),
-                        )
+                        .log_message(MessageType::ERROR, format!("Type check failed: {}", e))
                         .await;
                 }
             }
@@ -55,8 +52,7 @@ impl MethodRayServer {
         std::fs::write(&temp_file, source)?;
 
         // Run type check using FileChecker
-        let checker = FileChecker::new()
-            .with_context(|| "Failed to create FileChecker")?;
+        let checker = FileChecker::new().with_context(|| "Failed to create FileChecker")?;
 
         let methodray_diagnostics = checker
             .check_file(&temp_file)
@@ -116,7 +112,10 @@ impl LanguageServer for MethodRayServer {
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
-        self.documents.write().await.remove(&params.text_document.uri);
+        self.documents
+            .write()
+            .await
+            .remove(&params.text_document.uri);
 
         // Clear diagnostics
         self.client

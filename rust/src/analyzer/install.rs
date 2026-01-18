@@ -81,7 +81,12 @@ impl<'a> AstInstaller<'a> {
                 location,
             } => {
                 let recv_vtx = self.install_node(&receiver)?;
-                Some(finish_method_call(self.genv, recv_vtx, method_name, location))
+                Some(finish_method_call(
+                    self.genv,
+                    recv_vtx,
+                    method_name,
+                    location,
+                ))
             }
         }
     }

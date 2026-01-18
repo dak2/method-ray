@@ -35,7 +35,8 @@ impl MethodRegistry {
 
     /// Resolve a method for a receiver type
     pub fn resolve(&self, recv_ty: &Type, method_name: &str) -> Option<&MethodInfo> {
-        self.methods.get(&(recv_ty.clone(), method_name.to_string()))
+        self.methods
+            .get(&(recv_ty.clone(), method_name.to_string()))
     }
 }
 
@@ -49,7 +50,9 @@ mod tests {
         registry.register(Type::string(), "length", Type::integer());
 
         let info = registry.resolve(&Type::string(), "length").unwrap();
-        assert!(matches!(info.return_type, Type::Instance { ref class_name, .. } if class_name == "Integer"));
+        assert!(
+            matches!(info.return_type, Type::Instance { ref class_name, .. } if class_name == "Integer")
+        );
     }
 
     #[test]

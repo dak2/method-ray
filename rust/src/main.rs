@@ -3,19 +3,19 @@
 use anyhow::Result;
 use clap::Parser;
 
-mod types;
-mod parser;
-mod graph;
-mod env;
 mod analyzer;
-mod rbs;
 mod cache;
-mod diagnostics;
-mod source_map;
 mod checker;
 mod cli;
+mod diagnostics;
+mod env;
+mod graph;
+mod parser;
+mod rbs;
+mod source_map;
+mod types;
 
-use cli::{Cli, Commands, commands};
+use cli::{commands, Cli, Commands};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();

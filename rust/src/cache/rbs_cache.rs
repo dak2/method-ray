@@ -45,8 +45,7 @@ impl RbsCache {
             .context("Failed to get cache directory")?
             .join("methodray");
 
-        fs::create_dir_all(&cache_dir)
-            .context("Failed to create cache directory")?;
+        fs::create_dir_all(&cache_dir).context("Failed to create cache directory")?;
 
         Ok(cache_dir.join("rbs_cache.bin"))
     }
@@ -57,15 +56,13 @@ impl RbsCache {
         let bytes = fs::read(&path)
             .with_context(|| format!("Failed to read cache from {}", path.display()))?;
 
-        bincode::deserialize(&bytes)
-            .context("Failed to deserialize cache")
+        bincode::deserialize(&bytes).context("Failed to deserialize cache")
     }
 
     /// Save cache to disk
     pub fn save(&self) -> Result<()> {
         let path = Self::cache_path()?;
-        let bytes = bincode::serialize(self)
-            .context("Failed to serialize cache")?;
+        let bytes = bincode::serialize(self).context("Failed to serialize cache")?;
 
         fs::write(&path, bytes)
             .with_context(|| format!("Failed to write cache to {}", path.display()))?;

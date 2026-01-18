@@ -13,11 +13,7 @@ pub struct TypeError {
 
 impl TypeError {
     /// Create a new type error
-    pub fn new(
-        receiver_type: Type,
-        method_name: String,
-        location: Option<SourceLocation>,
-    ) -> Self {
+    pub fn new(receiver_type: Type, method_name: String, location: Option<SourceLocation>) -> Self {
         Self {
             receiver_type,
             method_name,

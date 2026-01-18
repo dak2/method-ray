@@ -34,7 +34,8 @@ pub fn install_ivar_write(
     ivar_name: String,
     value_vtx: VertexId,
 ) -> VertexId {
-    genv.scope_manager.set_instance_var_in_class(ivar_name, value_vtx);
+    genv.scope_manager
+        .set_instance_var_in_class(ivar_name, value_vtx);
     value_vtx
 }
 

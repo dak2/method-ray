@@ -41,16 +41,17 @@ impl<'a> RbsLoader<'a> {
         let _: Value = self
             .ruby
             .eval(&load_code)
-            .map_err(|e| {
-                RbsError::LoadError(format!("Failed to load method_loader.rb: {}", e))
-            })?;
+            .map_err(|e| RbsError::LoadError(format!("Failed to load method_loader.rb: {}", e)))?;
 
         // Instantiate Rbs::MethodLoader class and call method
         let results: Value = self
             .ruby
             .eval("Rbs::MethodLoader.new.load_methods")
             .map_err(|e| {
-                RbsError::LoadError(format!("Failed to call Rbs::MethodLoader#load_methods: {}", e))
+                RbsError::LoadError(format!(
+                    "Failed to call Rbs::MethodLoader#load_methods: {}",
+                    e
+                ))
             })?;
 
         self.parse_results(results)
@@ -77,9 +78,10 @@ impl<'a> RbsLoader<'a> {
             let receiver_class_value = hash
                 .get(self.ruby.to_symbol("receiver_class"))
                 .ok_or_else(|| RbsError::ParseError("Missing receiver_class".to_string()))?;
-            let receiver_class: String = String::try_convert(receiver_class_value).map_err(|e| {
-                RbsError::ParseError(format!("Failed to convert receiver_class: {}", e))
-            })?;
+            let receiver_class: String =
+                String::try_convert(receiver_class_value).map_err(|e| {
+                    RbsError::ParseError(format!("Failed to convert receiver_class: {}", e))
+                })?;
 
             let method_name_value = hash
                 .get(self.ruby.to_symbol("method_name"))
@@ -120,8 +122,8 @@ pub fn register_rbs_methods(genv: &mut GlobalEnv, ruby: &Ruby) -> Result<usize, 
     let rbs_version_value: Value = ruby
         .eval("RBS::VERSION")
         .unwrap_or_else(|_| ruby.eval("'unknown'").unwrap());
-    let rbs_version: String = String::try_convert(rbs_version_value)
-        .unwrap_or_else(|_| "unknown".to_string());
+    let rbs_version: String =
+        String::try_convert(rbs_version_value).unwrap_or_else(|_| "unknown".to_string());
 
     // Try to load from cache
     let methods = if let Ok(cache) = RbsCache::load() {

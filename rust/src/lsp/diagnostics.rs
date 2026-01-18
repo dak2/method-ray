@@ -1,5 +1,5 @@
-use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 use crate::diagnostics::{Diagnostic as MethodRayDiagnostic, DiagnosticLevel};
+use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 
 /// Extract method name length from error message
 /// Supports messages like:
@@ -36,7 +36,9 @@ pub fn to_lsp_diagnostic(diag: &MethodRayDiagnostic) -> Diagnostic {
     };
 
     // Use actual source length if available, otherwise extract from message
-    let highlight_length = diag.location.length
+    let highlight_length = diag
+        .location
+        .length
         .map(|len| len as u32)
         .or_else(|| extract_method_name_length(&diag.message))
         .unwrap_or(5);
@@ -104,10 +106,7 @@ mod tests {
             extract_method_name_length("method `upcase` is defined for String"),
             Some(6)
         );
-        assert_eq!(
-            extract_method_name_length("no method name here"),
-            None
-        );
+        assert_eq!(extract_method_name_length("no method name here"), None);
     }
 
     #[test]

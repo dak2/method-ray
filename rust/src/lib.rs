@@ -2,14 +2,14 @@
 //!
 //! This crate provides the core type inference engine.
 
-pub mod types;
-pub mod parser;
-pub mod graph;
-pub mod env;
 pub mod analyzer;
 pub mod cache;
 pub mod diagnostics;
+pub mod env;
+pub mod graph;
+pub mod parser;
 pub mod source_map;
+pub mod types;
 
 #[cfg(feature = "ruby-ffi")]
 pub mod rbs;

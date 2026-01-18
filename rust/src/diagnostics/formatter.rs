@@ -80,7 +80,6 @@ pub fn format_diagnostics_with_file(diagnostics: &[Diagnostic], file_path: &Path
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
