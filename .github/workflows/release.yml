@@ -5,6 +5,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   build-native:
     name: Build (${{ matrix.ruby-platform }})
@@ -16,16 +19,6 @@ jobs:
           - os: ubuntu-latest
             ruby-platform: x86_64-linux
             rust-target: x86_64-unknown-linux-gnu
-          - os: ubuntu-latest
-            ruby-platform: aarch64-linux
-            rust-target: aarch64-unknown-linux-gnu
-            use-cross: true
-          - os: macos-15
-            ruby-platform: x86_64-darwin
-            rust-target: x86_64-apple-darwin
-          - os: macos-14
-            ruby-platform: arm64-darwin
-            rust-target: aarch64-apple-darwin
 
     steps:
       - uses: actions/checkout@v6
@@ -46,38 +39,31 @@ jobs:
         run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Build CLI binary
-        run: |
-          if [ "${{ matrix.use-cross }}" = "true" ]; then
-            cd ext && cross build --release --features cli --bin methodray-cli --target ${{ matrix.rust-target }}
-          else
-            cd ext && cargo build --release --features cli --bin methodray-cli --target ${{ matrix.rust-target }}
-          fi
+        run: cargo build --release -p methodray-core --features cli --bin methodray
 
       - name: Build FFI extension
-        run: |
-          if [ "${{ matrix.use-cross }}" = "true" ]; then
-            cd ext && cross build --release --lib --target ${{ matrix.rust-target }}
-          else
-            cd ext && cargo build --release --lib --target ${{ matrix.rust-target }}
-          fi
+        run: cargo build --release -p methodray --lib
 
       - name: Copy binaries to lib directory
         run: |
           mkdir -p lib/methodray
-          # Copy CLI binary
+          # Debug: List build outputs
+          echo "=== Checking target/release/ ==="
+          ls -la target/release/ || echo "target/release/ does not exist"
+          # Copy CLI binary (from methodray-core package)
           if [[ "${{ matrix.rust-target }}" == *"windows"* ]]; then
-            cp target/${{ matrix.rust-target }}/release/methodray-cli.exe lib/methodray/
+            cp target/release/methodray.exe lib/methodray/methodray-cli.exe
           else
-            cp target/${{ matrix.rust-target }}/release/methodray-cli lib/methodray/
+            cp target/release/methodray lib/methodray/methodray-cli
           fi
           chmod 755 lib/methodray/methodray-cli* || true
-          # Copy FFI extension
+          # Copy FFI extension (from methodray package in ext/)
           case "${{ matrix.ruby-platform }}" in
             *-darwin)
-              cp target/${{ matrix.rust-target }}/release/libmethodray.dylib lib/methodray/methodray.bundle
+              cp target/release/libmethodray.dylib lib/methodray/methodray.bundle
               ;;
             *-linux)
-              cp target/${{ matrix.rust-target }}/release/libmethodray.so lib/methodray/methodray.so
+              cp target/release/libmethodray.so lib/methodray/methodray.so
               ;;
           esac
           ls -la lib/methodray/
@@ -167,11 +153,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to RubyGems
+        env:
+          GEM_HOST_API_KEY: ${{ secrets.GEM_HOST_API_KEY }}
         run: |
-          mkdir -p ~/.gem
-          echo -e "---\n:rubygems_api_key: ${{ secrets.GEM_HOST_API_KEY }}" > ~/.gem/credentials
-          chmod 0600 ~/.gem/credentials
           for gem in release/*.gem; do
             echo "Pushing $gem..."
-            gem push "$gem" || true
+            gem push "$gem"
           done
