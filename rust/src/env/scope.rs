@@ -7,6 +7,7 @@ pub struct ScopeId(pub usize);
 
 /// スコープの種類
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum ScopeKind {
     TopLevel,
     Class {
@@ -25,6 +26,7 @@ pub enum ScopeKind {
 
 /// スコープ情報
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Scope {
     pub id: ScopeId,
     pub kind: ScopeKind,
@@ -40,6 +42,7 @@ pub struct Scope {
     pub class_vars: HashMap<String, VertexId>,
 }
 
+#[allow(dead_code)]
 impl Scope {
     pub fn new(id: ScopeId, kind: ScopeKind, parent: Option<ScopeId>) -> Self {
         Self {
@@ -81,6 +84,7 @@ pub struct ScopeManager {
     current_scope: ScopeId,
 }
 
+#[allow(dead_code)]
 impl ScopeManager {
     pub fn new() -> Self {
         let top_level = Scope::new(

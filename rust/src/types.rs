@@ -1,5 +1,6 @@
 /// Type system for graph-based type inference
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub enum Type {
     /// Instance type: String, Integer, etc.
     Instance { class_name: String },

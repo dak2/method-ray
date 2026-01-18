@@ -17,6 +17,7 @@ pub struct VertexManager {
     next_vertex_id: usize,
 }
 
+#[allow(dead_code)]
 impl VertexManager {
     /// Create a new empty vertex manager
     pub fn new() -> Self {
@@ -31,7 +32,7 @@ impl VertexManager {
     pub fn new_vertex(&mut self) -> VertexId {
         let id = VertexId(self.next_vertex_id);
         self.next_vertex_id += 1;
-        self.vertices.insert(id, Vertex::new(id));
+        self.vertices.insert(id, Vertex::new());
         id
     }
 
@@ -39,7 +40,7 @@ impl VertexManager {
     pub fn new_source(&mut self, ty: Type) -> VertexId {
         let id = VertexId(self.next_vertex_id);
         self.next_vertex_id += 1;
-        self.sources.insert(id, Source::new(id, ty));
+        self.sources.insert(id, Source::new(ty));
         id
     }
 
@@ -113,7 +114,7 @@ impl VertexManager {
         }
 
         for (id, src) in &self.sources {
-            lines.push(format!("Source {}: {}", id.0, src.show()));
+            lines.push(format!("Source {}: {}", id.0, src.ty.show()));
         }
 
         lines.join("\n")
@@ -144,8 +145,8 @@ mod tests {
         let s1 = manager.new_source(Type::string());
         let s2 = manager.new_source(Type::integer());
 
-        assert_eq!(manager.get_source(s1).unwrap().show(), "String");
-        assert_eq!(manager.get_source(s2).unwrap().show(), "Integer");
+        assert_eq!(manager.get_source(s1).unwrap().ty.show(), "String");
+        assert_eq!(manager.get_source(s2).unwrap().ty.show(), "Integer");
     }
 
     #[test]

@@ -1,14 +1,14 @@
 //! RBS type loading and conversion
 
+#[cfg(feature = "ruby-ffi")]
 pub mod converter;
-
 #[cfg(feature = "ruby-ffi")]
 pub mod error;
 #[cfg(feature = "ruby-ffi")]
 pub mod loader;
 
+#[cfg(feature = "ruby-ffi")]
 pub use converter::RbsTypeConverter;
-
 #[cfg(feature = "ruby-ffi")]
 pub use error::RbsError;
 #[cfg(feature = "ruby-ffi")]

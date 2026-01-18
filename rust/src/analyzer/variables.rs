@@ -63,7 +63,7 @@ mod tests {
         let mut genv = GlobalEnv::new();
 
         let vtx = install_self(&mut genv);
-        assert_eq!(genv.get_source(vtx).unwrap().show(), "Object");
+        assert_eq!(genv.get_source(vtx).unwrap().ty.show(), "Object");
     }
 
     #[test]

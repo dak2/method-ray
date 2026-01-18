@@ -1,21 +1,17 @@
-//! AST Installer - AST traversal and node dispatch
+//! AST Installer - AST traversal and graph construction
 //!
 //! This module is responsible for:
 //! - Traversing the Ruby AST (Abstract Syntax Tree)
-//! - Dispatching each node type to the appropriate handler
 //! - Coordinating the graph construction process
 
 use crate::env::{GlobalEnv, LocalEnv};
 use crate::graph::{ChangeSet, VertexId};
-use crate::source_map::SourceLocation;
 use ruby_prism::Node;
 
-use super::calls::install_method_call;
 use super::definitions::{exit_scope, extract_class_name, install_class, install_method};
-use super::literals::install_literal;
-use super::variables::{
-    install_ivar_read, install_ivar_write, install_local_var_read, install_local_var_write,
-    install_self,
+use super::dispatch::{
+    dispatch_needs_child, dispatch_simple, finish_ivar_write, finish_local_var_write,
+    finish_method_call, DispatchResult, NeedsChildKind,
 };
 
 /// Build graph from AST
@@ -48,75 +44,46 @@ impl<'a> AstInstaller<'a> {
             return self.install_def_node(&def_node);
         }
 
-        // Instance variable write: @name = value
-        if let Some(ivar_write) = node.as_instance_variable_write_node() {
-            let ivar_name =
-                String::from_utf8_lossy(ivar_write.name().as_slice()).to_string();
-            let value_vtx = self.install_node(&ivar_write.value())?;
-            return Some(install_ivar_write(self.genv, ivar_name, value_vtx));
+        // Try simple dispatch first (no child processing needed)
+        match dispatch_simple(self.genv, self.lenv, node) {
+            DispatchResult::Vertex(vtx) => return Some(vtx),
+            DispatchResult::NotHandled => {}
         }
 
-        // Instance variable read: @name
-        if let Some(ivar_read) = node.as_instance_variable_read_node() {
-            let ivar_name = String::from_utf8_lossy(ivar_read.name().as_slice()).to_string();
-            return install_ivar_read(self.genv, &ivar_name);
+        // Check if node needs child processing
+        if let Some(kind) = dispatch_needs_child(node, self.source) {
+            return self.process_needs_child(kind);
         }
 
-        // self
-        if node.as_self_node().is_some() {
-            return Some(install_self(self.genv));
-        }
-
-        // x = "hello"
-        if let Some(write_node) = node.as_local_variable_write_node() {
-            let value = write_node.value();
-            let val_vtx = self.install_node(&value)?;
-            let var_name =
-                String::from_utf8_lossy(write_node.name().as_slice()).to_string();
-            return Some(install_local_var_write(
-                self.genv,
-                self.lenv,
-                &mut self.changes,
-                var_name,
-                val_vtx,
-            ));
-        }
-
-        // x
-        if let Some(read_node) = node.as_local_variable_read_node() {
-            let var_name = String::from_utf8_lossy(read_node.name().as_slice()).to_string();
-            return install_local_var_read(self.lenv, &var_name);
-        }
-
-        // Literals (String, Integer, Array, Hash, nil, true, false, Symbol)
-        if let Some(vtx) = install_literal(self.genv, node) {
-            return Some(vtx);
-        }
-
-        // x.upcase (method call)
-        if let Some(call_node) = node.as_call_node() {
-            let recv_vtx = if let Some(receiver) = call_node.receiver() {
-                self.install_node(&receiver)?
-            } else {
-                // Implicit receiver (self) - not yet supported
-                return None;
-            };
-
-            let method_name =
-                String::from_utf8_lossy(call_node.name().as_slice()).to_string();
-            let location =
-                SourceLocation::from_prism_location_with_source(&node.location(), self.source);
-
-            return Some(install_method_call(
-                self.genv,
-                recv_vtx,
-                method_name,
-                Some(location),
-            ));
-        }
-
-        // Other nodes not yet implemented
         None
+    }
+
+    /// Process nodes that need child evaluation first
+    fn process_needs_child(&mut self, kind: NeedsChildKind) -> Option<VertexId> {
+        match kind {
+            NeedsChildKind::IvarWrite { ivar_name, value } => {
+                let value_vtx = self.install_node(&value)?;
+                Some(finish_ivar_write(self.genv, ivar_name, value_vtx))
+            }
+            NeedsChildKind::LocalVarWrite { var_name, value } => {
+                let value_vtx = self.install_node(&value)?;
+                Some(finish_local_var_write(
+                    self.genv,
+                    self.lenv,
+                    &mut self.changes,
+                    var_name,
+                    value_vtx,
+                ))
+            }
+            NeedsChildKind::MethodCall {
+                receiver,
+                method_name,
+                location,
+            } => {
+                let recv_vtx = self.install_node(&receiver)?;
+                Some(finish_method_call(self.genv, recv_vtx, method_name, location))
+            }
+        }
     }
 
     /// Install class definition
@@ -138,8 +105,6 @@ impl<'a> AstInstaller<'a> {
     fn install_def_node(&mut self, def_node: &ruby_prism::DefNode) -> Option<VertexId> {
         let method_name = String::from_utf8_lossy(def_node.name().as_slice()).to_string();
         install_method(self.genv, method_name);
-
-        // TODO: Process parameters in future implementation
 
         if let Some(body) = def_node.body() {
             if let Some(statements) = body.as_statements_node() {

@@ -1,5 +1,6 @@
 mod calls;
 mod definitions;
+mod dispatch;
 mod install;
 mod literals;
 mod variables;

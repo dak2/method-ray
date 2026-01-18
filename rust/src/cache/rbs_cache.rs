@@ -37,6 +37,7 @@ impl SerializableMethodInfo {
     }
 }
 
+#[allow(dead_code)]
 impl RbsCache {
     /// Get cache file path
     pub fn cache_path() -> Result<PathBuf> {

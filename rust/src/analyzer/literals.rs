@@ -72,7 +72,7 @@ mod tests {
         // Create a mock string node - we test via integration instead
         // Unit test just verifies the type creation
         let vtx = genv.new_source(Type::string());
-        assert_eq!(genv.get_source(vtx).unwrap().show(), "String");
+        assert_eq!(genv.get_source(vtx).unwrap().ty.show(), "String");
     }
 
     #[test]
@@ -80,6 +80,6 @@ mod tests {
         let mut genv = GlobalEnv::new();
 
         let vtx = genv.new_source(Type::integer());
-        assert_eq!(genv.get_source(vtx).unwrap().show(), "Integer");
+        assert_eq!(genv.get_source(vtx).unwrap().ty.show(), "Integer");
     }
 }

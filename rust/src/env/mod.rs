@@ -13,6 +13,3 @@ pub mod vertex_manager;
 
 pub use global_env::GlobalEnv;
 pub use local_env::LocalEnv;
-pub use method_registry::MethodInfo;
-pub use scope::{Scope, ScopeId, ScopeKind, ScopeManager};
-pub use type_error::TypeError;

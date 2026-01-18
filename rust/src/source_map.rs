@@ -30,6 +30,7 @@ pub struct SourceLocation {
     pub length: usize,
 }
 
+#[allow(dead_code)]
 impl SourceLocation {
     pub fn new(line: usize, column: usize, length: usize) -> Self {
         Self {

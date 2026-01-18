@@ -6,6 +6,7 @@ pub struct LocalEnv {
     locals: HashMap<String, VertexId>,
 }
 
+#[allow(dead_code)]
 impl LocalEnv {
     pub fn new() -> Self {
         Self {

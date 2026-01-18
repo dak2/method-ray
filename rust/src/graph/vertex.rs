@@ -8,24 +8,18 @@ pub struct VertexId(pub usize);
 /// Source: Vertex with fixed type (e.g., literals)
 #[derive(Debug, Clone)]
 pub struct Source {
-    pub id: VertexId,
     pub ty: Type,
 }
 
 impl Source {
-    pub fn new(id: VertexId, ty: Type) -> Self {
-        Self { id, ty }
-    }
-
-    pub fn show(&self) -> String {
-        self.ty.show()
+    pub fn new(ty: Type) -> Self {
+        Self { ty }
     }
 }
 
 /// Vertex: Vertex that dynamically accumulates types (e.g., variables)
 #[derive(Debug, Clone)]
 pub struct Vertex {
-    pub id: VertexId,
     /// Type -> Sources (set of Source IDs that provided this type)
     pub types: HashMap<Type, HashSet<VertexId>>,
     /// Set of connected Vertex IDs
@@ -33,9 +27,8 @@ pub struct Vertex {
 }
 
 impl Vertex {
-    pub fn new(id: VertexId) -> Self {
+    pub fn new() -> Self {
         Self {
-            id,
             types: HashMap::new(),
             next_vtxs: HashSet::new(),
         }
@@ -94,25 +87,31 @@ impl Vertex {
     }
 }
 
+impl Default for Vertex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_source_type() {
-        let src = Source::new(VertexId(1), Type::string());
-        assert_eq!(src.show(), "String");
+        let src = Source::new(Type::string());
+        assert_eq!(src.ty.show(), "String");
     }
 
     #[test]
     fn test_vertex_empty() {
-        let vtx = Vertex::new(VertexId(2));
+        let vtx = Vertex::new();
         assert_eq!(vtx.show(), "untyped");
     }
 
     #[test]
     fn test_vertex_single_type() {
-        let mut vtx = Vertex::new(VertexId(2));
+        let mut vtx = Vertex::new();
 
         // Add String type
         let propagations = vtx.on_type_added(VertexId(1), vec![Type::string()]);
@@ -122,7 +121,7 @@ mod tests {
 
     #[test]
     fn test_vertex_union_type() {
-        let mut vtx = Vertex::new(VertexId(2));
+        let mut vtx = Vertex::new();
 
         // Add String type
         vtx.on_type_added(VertexId(1), vec![Type::string()]);
@@ -135,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_vertex_propagation() {
-        let mut vtx = Vertex::new(VertexId(2));
+        let mut vtx = Vertex::new();
 
         // Add connections
         vtx.add_next(VertexId(3));
@@ -151,7 +150,7 @@ mod tests {
 
     #[test]
     fn test_vertex_no_duplicate_propagation() {
-        let mut vtx = Vertex::new(VertexId(2));
+        let mut vtx = Vertex::new();
         vtx.add_next(VertexId(3));
 
         // Add same type twice → only first time propagates

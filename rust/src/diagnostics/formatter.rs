@@ -8,6 +8,7 @@ use std::path::Path;
 /// ```text
 /// app/models/user.rb:10:5: error: undefined method `upcase` for Integer
 /// ```
+#[allow(dead_code)]
 pub fn format_diagnostics(diagnostics: &[Diagnostic]) -> String {
     diagnostics
         .iter()
@@ -79,29 +80,6 @@ pub fn format_diagnostics_with_file(diagnostics: &[Diagnostic], file_path: &Path
     }
 }
 
-/// Format diagnostics with detailed output (for debugging)
-pub fn format_diagnostics_detailed(diagnostics: &[Diagnostic]) -> String {
-    diagnostics
-        .iter()
-        .map(|diag| {
-            let mut output = format!(
-                "{}:{}:{}: {}: {}",
-                diag.location.file.display(),
-                diag.location.line,
-                diag.location.column,
-                diag.level.as_str(),
-                diag.message
-            );
-
-            if let Some(code) = &diag.code {
-                output.push_str(&format!(" [{}]", code));
-            }
-
-            output
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
 
 #[cfg(test)]
 mod tests {
@@ -122,14 +100,16 @@ mod tests {
                 "Integer",
                 "upcase",
             ),
-            Diagnostic::warning(
+            Diagnostic::union_partial_error(
                 Location {
                     file: PathBuf::from("test.rb"),
                     line: 15,
                     column: 3,
                     length: None,
                 },
-                "unused variable".to_string(),
+                vec!["String".to_string()],
+                vec!["Integer".to_string()],
+                "upcase",
             ),
         ];
 

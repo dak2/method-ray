@@ -37,6 +37,7 @@ pub struct GlobalEnv {
     pub scope_manager: ScopeManager,
 }
 
+#[allow(dead_code)]
 impl GlobalEnv {
     pub fn new() -> Self {
         Self {
@@ -151,11 +152,10 @@ impl GlobalEnv {
         &mut self,
         receiver_type: Type,
         method_name: String,
-        vertex_id: VertexId,
         location: Option<SourceLocation>,
     ) {
         self.type_errors
-            .push(TypeError::new(receiver_type, method_name, vertex_id, location));
+            .push(TypeError::new(receiver_type, method_name, location));
     }
 
     // ===== Scope Management =====
@@ -225,8 +225,8 @@ mod tests {
         let s1 = genv.new_source(Type::string());
         let s2 = genv.new_source(Type::integer());
 
-        assert_eq!(genv.get_source(s1).unwrap().show(), "String");
-        assert_eq!(genv.get_source(s2).unwrap().show(), "Integer");
+        assert_eq!(genv.get_source(s1).unwrap().ty.show(), "String");
+        assert_eq!(genv.get_source(s2).unwrap().ty.show(), "Integer");
     }
 
     #[test]

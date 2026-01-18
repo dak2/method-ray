@@ -9,6 +9,7 @@ use crate::types::Type;
 pub struct BoxId(pub usize);
 
 /// Box trait: represents constraints such as method calls
+#[allow(dead_code)]
 pub trait BoxTrait: Send + Sync {
     fn id(&self) -> BoxId;
     fn run(&mut self, genv: &mut GlobalEnv, changes: &mut ChangeSet);
@@ -16,6 +17,7 @@ pub trait BoxTrait: Send + Sync {
 }
 
 /// Box representing a method call
+#[allow(dead_code)]
 pub struct MethodCallBox {
     id: BoxId,
     recv: VertexId,
@@ -77,7 +79,6 @@ impl BoxTrait for MethodCallBox {
                 genv.record_type_error(
                     recv_ty.clone(),
                     self.method_name.clone(),
-                    self.ret, // Use return value vertex as error location
                     self.location.clone(),
                 );
             }

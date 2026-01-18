@@ -2,10 +2,11 @@
 //!
 //! Handles registration and execution of Box instances (reactive computations).
 
-use crate::graph::{BoxId, BoxTrait, ChangeSet};
+use crate::graph::{BoxId, BoxTrait};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Manages boxes and their execution queue
+#[allow(dead_code)]
 pub struct BoxManager {
     /// All registered boxes
     pub boxes: HashMap<BoxId, Box<dyn BoxTrait>>,
@@ -23,6 +24,7 @@ impl Default for BoxManager {
     }
 }
 
+#[allow(dead_code)]
 impl BoxManager {
     /// Create a new empty box manager
     pub fn new() -> Self {
@@ -32,14 +34,6 @@ impl BoxManager {
             run_queue_set: HashSet::new(),
             next_box_id: 0,
         }
-    }
-
-    /// Register a box and return its ID
-    pub fn register(&mut self, box_instance: Box<dyn BoxTrait>) -> BoxId {
-        let id = BoxId(self.next_box_id);
-        self.next_box_id += 1;
-        self.boxes.insert(id, box_instance);
-        id
     }
 
     /// Get a box by ID
@@ -93,24 +87,6 @@ impl BoxManager {
     /// Check if there are no registered boxes
     pub fn is_empty(&self) -> bool {
         self.boxes.is_empty()
-    }
-
-    /// Execute a single box and return its changes
-    /// Returns None if the box doesn't exist
-    pub fn execute_box<F>(&mut self, box_id: BoxId, mut executor: F) -> Option<ChangeSet>
-    where
-        F: FnMut(&mut Box<dyn BoxTrait>, &mut ChangeSet),
-    {
-        // Temporarily remove the box to avoid borrow issues
-        let mut temp_box = self.boxes.remove(&box_id)?;
-        let mut changes = ChangeSet::new();
-
-        executor(&mut temp_box, &mut changes);
-
-        // Put the box back
-        self.boxes.insert(box_id, temp_box);
-
-        Some(changes)
     }
 }
 
