@@ -6,7 +6,7 @@
 //! - Attaching source location for error reporting
 
 use crate::env::GlobalEnv;
-use crate::graph::{BoxId, MethodCallBox, VertexId};
+use crate::graph::{MethodCallBox, VertexId};
 use crate::source_map::SourceLocation;
 
 /// Install method call and return the return value's VertexId
@@ -20,12 +20,9 @@ pub fn install_method_call(
     let ret_vtx = genv.new_vertex();
 
     // Create MethodCallBox with location
-    let box_id = BoxId(genv.next_box_id);
-    genv.next_box_id += 1;
-
+    let box_id = genv.alloc_box_id();
     let call_box = MethodCallBox::new(box_id, recv_vtx, method_name, ret_vtx, location);
-    genv.boxes.insert(box_id, Box::new(call_box));
-    genv.add_run(box_id);
+    genv.register_box(box_id, Box::new(call_box));
 
     ret_vtx
 }
@@ -54,6 +51,6 @@ mod tests {
         let _ret_vtx = install_method_call(&mut genv, recv_vtx, "upcase".to_string(), None);
 
         // Box should be added
-        assert_eq!(genv.boxes.len(), 1);
+        assert_eq!(genv.box_count(), 1);
     }
 }

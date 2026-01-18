@@ -1,99 +1,103 @@
+//! Global environment: facade for the type inference engine
+//!
+//! This module provides a unified interface for managing vertices, boxes,
+//! methods, type errors, and scopes during type inference.
+
+use crate::env::box_manager::BoxManager;
+use crate::env::method_registry::{MethodInfo, MethodRegistry};
 use crate::env::scope::{Scope, ScopeId, ScopeKind, ScopeManager};
+use crate::env::type_error::TypeError;
+use crate::env::vertex_manager::VertexManager;
 use crate::graph::{BoxId, BoxTrait, ChangeSet, EdgeUpdate, Source, Vertex, VertexId};
 use crate::source_map::SourceLocation;
 use crate::types::Type;
-use std::collections::{HashMap, HashSet, VecDeque};
-
-/// Method information
-pub struct MethodInfo {
-    pub return_type: Type,
-}
-
-/// Type error information for diagnostic reporting
-#[derive(Debug, Clone)]
-pub struct TypeError {
-    pub receiver_type: Type,
-    pub method_name: String,
-    pub vertex_id: VertexId, // Location in the graph
-    pub location: Option<SourceLocation>, // Source code location
-}
 
 /// Global environment: core of the type inference engine
+///
+/// This is a facade that coordinates the various subsystems:
+/// - Vertex management (type graph nodes)
+/// - Box management (reactive computations)
+/// - Method registry (method definitions)
+/// - Type errors (diagnostic collection)
+/// - Scope management (lexical scopes)
 pub struct GlobalEnv {
-    /// Vertex management
-    pub vertices: HashMap<VertexId, Vertex>,
-    pub sources: HashMap<VertexId, Source>,
+    /// Vertex and source management
+    vertex_manager: VertexManager,
 
-    /// Box management
-    pub boxes: HashMap<BoxId, Box<dyn BoxTrait>>,
-    pub run_queue: VecDeque<BoxId>,
-    run_queue_set: HashSet<BoxId>,
+    /// Box management and execution queue
+    box_manager: BoxManager,
 
     /// Method definitions
-    methods: HashMap<(Type, String), MethodInfo>,
+    method_registry: MethodRegistry,
 
     /// Type errors collected during analysis
     pub type_errors: Vec<TypeError>,
 
     /// Scope management
     pub scope_manager: ScopeManager,
-
-    /// ID generation
-    next_vertex_id: usize,
-    pub next_box_id: usize,
 }
 
 impl GlobalEnv {
     pub fn new() -> Self {
         Self {
-            vertices: HashMap::new(),
-            sources: HashMap::new(),
-            boxes: HashMap::new(),
-            run_queue: VecDeque::new(),
-            run_queue_set: HashSet::new(),
-            methods: HashMap::new(),
+            vertex_manager: VertexManager::new(),
+            box_manager: BoxManager::new(),
+            method_registry: MethodRegistry::new(),
             type_errors: Vec::new(),
             scope_manager: ScopeManager::new(),
-            next_vertex_id: 0,
-            next_box_id: 0,
         }
     }
 
+    // ===== Vertex Management =====
+
     /// Create new Vertex
     pub fn new_vertex(&mut self) -> VertexId {
-        let id = VertexId(self.next_vertex_id);
-        self.next_vertex_id += 1;
-        self.vertices.insert(id, Vertex::new(id));
-        id
+        self.vertex_manager.new_vertex()
     }
 
     /// Create new Source (fixed type)
     pub fn new_source(&mut self, ty: Type) -> VertexId {
-        let id = VertexId(self.next_vertex_id);
-        self.next_vertex_id += 1;
-        self.sources.insert(id, Source::new(id, ty));
-        id
+        self.vertex_manager.new_source(ty)
     }
 
     /// Get Vertex
     pub fn get_vertex(&self, id: VertexId) -> Option<&Vertex> {
-        self.vertices.get(&id)
+        self.vertex_manager.get_vertex(id)
     }
 
     /// Get Source
     pub fn get_source(&self, id: VertexId) -> Option<&Source> {
-        self.sources.get(&id)
+        self.vertex_manager.get_source(id)
     }
 
     /// Add edge (immediate type propagation)
     pub fn add_edge(&mut self, src: VertexId, dst: VertexId) {
-        // Add edge from src to dst
-        if let Some(src_vtx) = self.vertices.get_mut(&src) {
-            src_vtx.add_next(dst);
-        }
+        self.vertex_manager.add_edge(src, dst);
+    }
 
-        // Propagate type
-        self.propagate_from(src, dst);
+    /// For debugging: display types of all Vertices
+    pub fn show_all(&self) -> String {
+        self.vertex_manager.show_all()
+    }
+
+    // ===== Box Management =====
+
+    /// Allocate a new BoxId
+    pub fn alloc_box_id(&mut self) -> BoxId {
+        let id = BoxId(self.box_manager.next_box_id);
+        self.box_manager.next_box_id += 1;
+        id
+    }
+
+    /// Register a Box with a pre-allocated ID and add it to the run queue
+    pub fn register_box(&mut self, box_id: BoxId, box_instance: Box<dyn BoxTrait>) {
+        self.box_manager.insert(box_id, box_instance);
+        self.box_manager.add_run(box_id);
+    }
+
+    /// Get the number of registered boxes
+    pub fn box_count(&self) -> usize {
+        self.box_manager.len()
     }
 
     /// Apply changes
@@ -112,52 +116,35 @@ impl GlobalEnv {
         }
     }
 
-    /// Propagate type from src to dst
-    fn propagate_from(&mut self, src: VertexId, dst: VertexId) {
-        // Get src type
-        let types: Vec<Type> = if let Some(src_vtx) = self.vertices.get(&src) {
-            src_vtx.types.keys().cloned().collect()
-        } else if let Some(src_source) = self.sources.get(&src) {
-            vec![src_source.ty.clone()]
-        } else {
-            return;
-        };
+    /// Execute all Boxes
+    pub fn run_all(&mut self) {
+        while let Some(box_id) = self.box_manager.pop_run() {
+            if self.box_manager.contains(box_id) {
+                let mut changes = ChangeSet::new();
 
-        if !types.is_empty() {
-            self.propagate_types(src, dst, types);
+                // Execute Box (temporarily remove to avoid &mut self borrow issue)
+                let mut temp_box = self.box_manager.remove(box_id).unwrap();
+                temp_box.run(self, &mut changes);
+                self.box_manager.insert(box_id, temp_box);
+
+                self.apply_changes(changes);
+            }
         }
     }
 
-    /// Recursively propagate type
-    fn propagate_types(&mut self, src_id: VertexId, dst_id: VertexId, types: Vec<Type>) {
-        // Add type only if dst is Vertex
-        let next_propagations = if let Some(dst_vtx) = self.vertices.get_mut(&dst_id) {
-            dst_vtx.on_type_added(src_id, types)
-        } else {
-            // If dst is Source, do nothing (fixed type)
-            return;
-        };
-
-        // Recursively propagate
-        for (next_id, next_types) in next_propagations {
-            self.propagate_types(dst_id, next_id, next_types);
-        }
-    }
+    // ===== Method Registry =====
 
     /// Resolve method
     pub fn resolve_method(&self, recv_ty: &Type, method_name: &str) -> Option<&MethodInfo> {
-        self.methods.get(&(recv_ty.clone(), method_name.to_string()))
+        self.method_registry.resolve(recv_ty, method_name)
     }
 
     /// Register built-in method
     pub fn register_builtin_method(&mut self, recv_ty: Type, method_name: &str, ret_ty: Type) {
-        self.methods.insert(
-            (recv_ty, method_name.to_string()),
-            MethodInfo {
-                return_type: ret_ty,
-            },
-        );
+        self.method_registry.register(recv_ty, method_name, ret_ty);
     }
+
+    // ===== Type Errors =====
 
     /// Record a type error (undefined method)
     pub fn record_type_error(
@@ -167,56 +154,11 @@ impl GlobalEnv {
         vertex_id: VertexId,
         location: Option<SourceLocation>,
     ) {
-        self.type_errors.push(TypeError {
-            receiver_type,
-            method_name,
-            vertex_id,
-            location,
-        });
+        self.type_errors
+            .push(TypeError::new(receiver_type, method_name, vertex_id, location));
     }
 
-    /// Add Box to queue
-    pub fn add_run(&mut self, box_id: BoxId) {
-        if !self.run_queue_set.contains(&box_id) {
-            self.run_queue.push_back(box_id);
-            self.run_queue_set.insert(box_id);
-        }
-    }
-
-    /// Execute all Boxes
-    pub fn run_all(&mut self) {
-        while let Some(box_id) = self.run_queue.pop_front() {
-            self.run_queue_set.remove(&box_id);
-
-            if self.boxes.contains_key(&box_id) {
-                let mut changes = ChangeSet::new();
-
-                // Execute Box (temporarily remove to avoid &mut self borrow issue)
-                let mut temp_box = self.boxes.remove(&box_id).unwrap();
-                temp_box.run(self, &mut changes);
-                self.boxes.insert(box_id, temp_box);
-
-                self.apply_changes(changes);
-            }
-        }
-    }
-
-    /// For debugging: display types of all Vertices
-    pub fn show_all(&self) -> String {
-        let mut lines = Vec::new();
-
-        for (id, vtx) in &self.vertices {
-            lines.push(format!("Vertex {}: {}", id.0, vtx.show()));
-        }
-
-        for (id, src) in &self.sources {
-            lines.push(format!("Source {}: {}", id.0, src.show()));
-        }
-
-        lines.join("\n")
-    }
-
-    // Scope-related helper methods
+    // ===== Scope Management =====
 
     /// Enter a class scope
     pub fn enter_class(&mut self, name: String) -> ScopeId {
@@ -252,6 +194,12 @@ impl GlobalEnv {
     /// Get current scope mutably
     pub fn current_scope_mut(&mut self) -> &mut Scope {
         self.scope_manager.current_scope_mut()
+    }
+}
+
+impl Default for GlobalEnv {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
