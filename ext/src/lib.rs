@@ -66,6 +66,18 @@ impl Analyzer {
     }
 }
 
+/// Setup function that only generates RBS cache
+/// This is used during gem build to pre-generate the cache
+fn setup() -> Result<String, Error> {
+    let ruby = unsafe { Ruby::get_unchecked() };
+    let mut genv = GlobalEnv::new();
+
+    // This will load RBS and save to cache if not already cached
+    let count = rbs::register_rbs_methods(&mut genv, &ruby)?;
+
+    Ok(format!("RBS cache generated with {} methods", count))
+}
+
 #[magnus::init]
 fn init(ruby: &Ruby) -> Result<(), Error> {
     let module = ruby.define_module("MethodRay")?;
@@ -74,6 +86,9 @@ fn init(ruby: &Ruby) -> Result<(), Error> {
     class.define_singleton_method("new", function!(Analyzer::new, 1))?;
     class.define_method("version", method!(Analyzer::version, 0))?;
     class.define_method("infer_types", method!(Analyzer::infer_types, 1))?;
+
+    // Module-level setup function for cache generation
+    module.define_singleton_method("setup", function!(setup, 0))?;
 
     Ok(())
 }

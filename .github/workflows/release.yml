@@ -77,6 +77,20 @@ jobs:
           esac
           ls -la lib/methodray/
 
+      - name: Generate RBS cache
+        run: |
+          echo "Generating RBS cache..."
+          ruby -I lib -rmethodray -e 'MethodRay.setup'
+          # Copy cache to lib directory for bundling
+          CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/methodray"
+          if [ -f "$CACHE_DIR/rbs_cache.bin" ]; then
+            cp "$CACHE_DIR/rbs_cache.bin" lib/methodray/
+            echo "RBS cache copied to lib/methodray/"
+            ls -la lib/methodray/
+          else
+            echo "Warning: RBS cache not found at $CACHE_DIR/rbs_cache.bin"
+          fi
+
       - name: Build platform gem
         run: |
           # Create platform-specific gemspec
@@ -93,7 +107,7 @@ jobs:
             spec.homepage      = 'https://github.com/dak2/method-ray'
             spec.license       = 'MIT'
             spec.required_ruby_version = '>= 3.4.0'
-            spec.files = Dir['lib/**/*', 'exe/*', 'README.md', 'LICENSE', 'CHANGELOG.md']
+            spec.files = Dir['lib/**/*', 'exe/*', 'README.md', 'LICENSE', 'CHANGELOG.md'] + ['lib/methodray/rbs_cache.bin']
             spec.bindir        = 'exe'
             spec.executables   = ['methodray']
             spec.require_paths = ['lib']
@@ -160,12 +174,3 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish to RubyGems
-        env:
-          GEM_HOST_API_KEY: ${{ secrets.GEM_HOST_API_KEY }}
-        run: |
-          for gem in release/*.gem; do
-            echo "Pushing $gem..."
-            gem push "$gem"
-          done

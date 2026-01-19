@@ -39,7 +39,7 @@ impl SerializableMethodInfo {
 
 #[allow(dead_code)]
 impl RbsCache {
-    /// Get cache file path
+    /// Get user cache file path (in ~/.cache/methodray/)
     pub fn cache_path() -> Result<PathBuf> {
         let cache_dir = dirs::cache_dir()
             .context("Failed to get cache directory")?
@@ -50,8 +50,42 @@ impl RbsCache {
         Ok(cache_dir.join("rbs_cache.bin"))
     }
 
+    /// Get bundled cache path (shipped with gem)
+    ///
+    /// Gem structure after install:
+    ///   lib/methodray/
+    ///     methodray-cli      # CLI binary
+    ///     methodray.bundle   # FFI extension (macOS) or methodray.so (Linux)
+    ///     rbs_cache.bin      # Pre-built cache
+    ///
+    /// The CLI binary and cache are in the same directory.
+    fn bundled_cache_path() -> Option<PathBuf> {
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                // Cache is in the same directory as CLI binary
+                let bundled = exe_dir.join("rbs_cache.bin");
+                if bundled.exists() {
+                    return Some(bundled);
+                }
+            }
+        }
+        None
+    }
+
     /// Load cache from disk
+    /// Tries bundled cache first, then user cache
     pub fn load() -> Result<Self> {
+        // Try bundled cache first (shipped with gem)
+        if let Some(bundled_path) = Self::bundled_cache_path() {
+            if let Ok(bytes) = fs::read(&bundled_path) {
+                if let Ok(cache) = bincode::deserialize::<Self>(&bytes) {
+                    eprintln!("Loaded bundled cache from {}", bundled_path.display());
+                    return Ok(cache);
+                }
+            }
+        }
+
+        // Fall back to user cache
         let path = Self::cache_path()?;
         let bytes = fs::read(&path)
             .with_context(|| format!("Failed to read cache from {}", path.display()))?;
@@ -121,6 +155,7 @@ impl RbsCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn test_cache_serialization() {
@@ -154,5 +189,114 @@ mod tests {
         assert!(cache.is_valid("0.1.0", "3.7.0"));
         assert!(!cache.is_valid("0.2.0", "3.7.0"));
         assert!(!cache.is_valid("0.1.0", "3.8.0"));
+    }
+
+    #[test]
+    fn test_serializable_method_info_return_type() {
+        let method_info = SerializableMethodInfo {
+            receiver_class: "String".to_string(),
+            method_name: "upcase".to_string(),
+            return_type_str: "String".to_string(),
+        };
+
+        let return_type = method_info.return_type();
+        assert_eq!(return_type.show(), "String");
+    }
+
+    #[test]
+    fn test_cache_methods_accessor() {
+        let cache = RbsCache {
+            version: "0.1.0".to_string(),
+            rbs_version: "3.7.0".to_string(),
+            methods: vec![
+                SerializableMethodInfo {
+                    receiver_class: "String".to_string(),
+                    method_name: "upcase".to_string(),
+                    return_type_str: "String".to_string(),
+                },
+                SerializableMethodInfo {
+                    receiver_class: "Integer".to_string(),
+                    method_name: "to_s".to_string(),
+                    return_type_str: "String".to_string(),
+                },
+            ],
+            timestamp: SystemTime::now(),
+        };
+
+        let methods = cache.methods();
+        assert_eq!(methods.len(), 2);
+        assert_eq!(methods[0].receiver_class, "String");
+        assert_eq!(methods[0].method_name, "upcase");
+        assert_eq!(methods[1].receiver_class, "Integer");
+        assert_eq!(methods[1].method_name, "to_s");
+    }
+
+    #[test]
+    fn test_cache_save_and_load() {
+        let temp_dir = tempdir().unwrap();
+        let cache_path = temp_dir.path().join("test_cache.bin");
+
+        let original_cache = RbsCache {
+            version: "0.1.0".to_string(),
+            rbs_version: "3.7.0".to_string(),
+            methods: vec![
+                SerializableMethodInfo {
+                    receiver_class: "String".to_string(),
+                    method_name: "upcase".to_string(),
+                    return_type_str: "String".to_string(),
+                },
+                SerializableMethodInfo {
+                    receiver_class: "Array".to_string(),
+                    method_name: "first".to_string(),
+                    return_type_str: "Object".to_string(),
+                },
+            ],
+            timestamp: SystemTime::now(),
+        };
+
+        // Save to temp file
+        let bytes = bincode::serialize(&original_cache).unwrap();
+        fs::write(&cache_path, &bytes).unwrap();
+
+        // Load from temp file
+        let loaded_bytes = fs::read(&cache_path).unwrap();
+        let loaded_cache: RbsCache = bincode::deserialize(&loaded_bytes).unwrap();
+
+        assert_eq!(loaded_cache.version, "0.1.0");
+        assert_eq!(loaded_cache.rbs_version, "3.7.0");
+        assert_eq!(loaded_cache.methods.len(), 2);
+        assert_eq!(loaded_cache.methods[0].method_name, "upcase");
+        assert_eq!(loaded_cache.methods[1].method_name, "first");
+    }
+
+    #[test]
+    fn test_cache_with_empty_methods() {
+        let cache = RbsCache {
+            version: "0.1.0".to_string(),
+            rbs_version: "3.7.0".to_string(),
+            methods: vec![],
+            timestamp: SystemTime::now(),
+        };
+
+        let bytes = bincode::serialize(&cache).unwrap();
+        let deserialized: RbsCache = bincode::deserialize(&bytes).unwrap();
+
+        assert_eq!(deserialized.methods.len(), 0);
+        assert!(deserialized.is_valid("0.1.0", "3.7.0"));
+    }
+
+    #[test]
+    fn test_cache_validation_version_mismatch() {
+        let cache = RbsCache {
+            version: "0.1.0".to_string(),
+            rbs_version: "3.7.0".to_string(),
+            methods: vec![],
+            timestamp: SystemTime::now(),
+        };
+
+        // Both versions must match
+        assert!(!cache.is_valid("0.1.1", "3.7.0"));
+        assert!(!cache.is_valid("0.1.0", "3.7.1"));
+        assert!(!cache.is_valid("0.2.0", "4.0.0"));
     }
 }
