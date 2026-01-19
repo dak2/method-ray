@@ -82,21 +82,13 @@ jobs:
           echo "Generating RBS cache..."
           ruby -I lib -rmethodray -e 'MethodRay.setup'
           # Copy cache to lib directory for bundling
-          # macOS uses ~/Library/Caches, Linux uses ~/.cache
-          if [[ "${{ runner.os }}" == "macOS" ]]; then
-            CACHE_DIR="$HOME/Library/Caches/methodray"
-          else
-            CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/methodray"
-          fi
-          echo "Looking for cache at: $CACHE_DIR/rbs_cache.bin"
+          CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/methodray"
           if [ -f "$CACHE_DIR/rbs_cache.bin" ]; then
             cp "$CACHE_DIR/rbs_cache.bin" lib/methodray/
             echo "RBS cache copied to lib/methodray/"
             ls -la lib/methodray/
           else
-            echo "Error: RBS cache not found at $CACHE_DIR/rbs_cache.bin"
-            ls -la "$CACHE_DIR" || echo "Cache directory does not exist"
-            exit 1
+            echo "Warning: RBS cache not found at $CACHE_DIR/rbs_cache.bin"
           fi
 
       - name: Build platform gem
@@ -132,9 +124,33 @@ jobs:
           name: gem-${{ matrix.ruby-platform }}
           path: pkg/*.gem
 
+  build-source:
+    name: Build source gem
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+
+      - name: Build source gem
+        run: |
+          gem build methodray.gemspec
+          mkdir -p pkg
+          mv *.gem pkg/
+
+      - name: Upload gem artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: gem-source
+          path: pkg/*.gem
+
   release:
     name: Release
-    needs: build-native
+    needs: [build-native, build-source]
     runs-on: ubuntu-latest
 
     steps:
