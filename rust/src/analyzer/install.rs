@@ -8,6 +8,7 @@ use crate::env::{GlobalEnv, LocalEnv};
 use crate::graph::{ChangeSet, VertexId};
 use ruby_prism::Node;
 
+use super::attr_methods::try_process_attr_method;
 use super::definitions::{exit_scope, extract_class_name, install_class, install_method};
 use super::dispatch::{
     dispatch_needs_child, dispatch_simple, finish_ivar_write, finish_local_var_write,
@@ -42,6 +43,13 @@ impl<'a> AstInstaller<'a> {
         // Method definition
         if let Some(def_node) = node.as_def_node() {
             return self.install_def_node(&def_node);
+        }
+
+        // attr_reader, attr_writer, attr_accessor
+        if let Some(call_node) = node.as_call_node() {
+            if try_process_attr_method(self.genv, &call_node) {
+                return None;
+            }
         }
 
         // Try simple dispatch first (no child processing needed)

@@ -1,3 +1,4 @@
+mod attr_methods;
 mod calls;
 mod definitions;
 mod dispatch;
