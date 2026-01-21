@@ -134,3 +134,94 @@ y = x.upcase.downcase
     let y_vtx = lenv.get_var("y").unwrap();
     assert_eq!(genv.get_vertex(y_vtx).unwrap().show(), "String");
 }
+
+#[test]
+fn test_attr_reader_registers_method() {
+    let source = r#"
+class User
+  attr_reader :name
+end
+"#;
+
+    let (genv, _lenv) = analyze(source);
+
+    // attr_reader should register a method on the User class
+    let recv_ty = Type::Instance {
+        class_name: "User".to_string(),
+    };
+    let result = genv.resolve_method(&recv_ty, "name");
+    assert!(result.is_some(), "attr_reader should register a 'name' method");
+}
+
+#[test]
+fn test_attr_reader_with_ivar_type() {
+    // Note: Currently attr_reader registers with Bot type because
+    // type propagation happens after attr_reader processing.
+    // This is a known limitation - ideally we'd do two-pass processing
+    // or lazy evaluation to get the correct type.
+    let source = r#"
+class User
+  def initialize
+    @name = "John"
+  end
+
+  attr_reader :name
+end
+"#;
+
+    let (genv, _lenv) = analyze(source);
+
+    // attr_reader should register a method (type may be untyped due to processing order)
+    let recv_ty = Type::Instance {
+        class_name: "User".to_string(),
+    };
+    let result = genv.resolve_method(&recv_ty, "name");
+    assert!(result.is_some(), "attr_reader should register 'name' method");
+    // Type is Bot (untyped) because type propagation hasn't run yet when attr_reader processes
+    // This is acceptable for now - the method is registered and callable
+}
+
+#[test]
+fn test_attr_reader_error_detection() {
+    let source = r#"
+class User
+  def initialize
+    @age = 25
+  end
+
+  attr_reader :age
+
+  def test
+    x = @age.upcase
+  end
+end
+"#;
+
+    let (genv, _lenv) = analyze(source);
+
+    // Type error should be detected: @age is Integer, not String
+    assert_eq!(genv.type_errors.len(), 1);
+    assert_eq!(genv.type_errors[0].method_name, "upcase");
+}
+
+#[test]
+fn test_attr_accessor() {
+    let source = r#"
+class User
+  attr_accessor :email
+end
+"#;
+
+    let (genv, _lenv) = analyze(source);
+
+    let recv_ty = Type::Instance {
+        class_name: "User".to_string(),
+    };
+
+    // attr_accessor should register both getter and setter
+    let getter = genv.resolve_method(&recv_ty, "email");
+    assert!(getter.is_some(), "attr_accessor should register getter");
+
+    let setter = genv.resolve_method(&recv_ty, "email=");
+    assert!(setter.is_some(), "attr_accessor should register setter");
+}
