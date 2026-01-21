@@ -79,7 +79,6 @@ impl RbsCache {
         if let Some(bundled_path) = Self::bundled_cache_path() {
             if let Ok(bytes) = fs::read(&bundled_path) {
                 if let Ok(cache) = bincode::deserialize::<Self>(&bytes) {
-                    eprintln!("Loaded bundled cache from {}", bundled_path.display());
                     return Ok(cache);
                 }
             }

@@ -128,7 +128,6 @@ pub fn register_rbs_methods(genv: &mut GlobalEnv, ruby: &Ruby) -> Result<usize, 
     // Try to load from cache
     let methods = if let Ok(cache) = RbsCache::load() {
         if cache.is_valid(methodray_version, &rbs_version) {
-            eprintln!("Loaded {} methods from cache", cache.methods.len());
             cache.to_method_infos()
         } else {
             eprintln!("Cache invalid, reloading from RBS...");

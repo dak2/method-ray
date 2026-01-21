@@ -70,7 +70,6 @@ fn load_rbs_from_cache(genv: &mut GlobalEnv) -> Result<()> {
     )?;
 
     let methods = cache.methods();
-    eprintln!("Loaded {} methods from cache", methods.len());
 
     for method_info in methods {
         let receiver_type = Type::Instance {
