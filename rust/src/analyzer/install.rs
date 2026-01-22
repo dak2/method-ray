@@ -13,6 +13,10 @@ use super::dispatch::{
     dispatch_needs_child, dispatch_simple, finish_ivar_write, finish_local_var_write,
     finish_method_call, DispatchResult, NeedsChildKind,
 };
+use super::parameters::{
+    install_keyword_rest_parameter, install_optional_parameter, install_required_parameter,
+    install_rest_parameter,
+};
 
 /// Build graph from AST
 pub struct AstInstaller<'a> {
@@ -111,6 +115,12 @@ impl<'a> AstInstaller<'a> {
         let method_name = String::from_utf8_lossy(def_node.name().as_slice()).to_string();
         install_method(self.genv, method_name);
 
+        // Process parameters BEFORE processing body
+        // This ensures parameters are available as local variables in the method body
+        if let Some(params_node) = def_node.parameters() {
+            self.install_parameters(&params_node);
+        }
+
         if let Some(body) = def_node.body() {
             if let Some(statements) = body.as_statements_node() {
                 self.install_statements(&statements);
@@ -119,6 +129,59 @@ impl<'a> AstInstaller<'a> {
 
         exit_scope(self.genv);
         None
+    }
+
+    /// Install method parameters as local variables
+    fn install_parameters(&mut self, params_node: &ruby_prism::ParametersNode) {
+        // Required parameters: def foo(a, b)
+        for node in params_node.requireds().iter() {
+            if let Some(req_param) = node.as_required_parameter_node() {
+                let name = String::from_utf8_lossy(req_param.name().as_slice()).to_string();
+                install_required_parameter(self.genv, self.lenv, name);
+            }
+        }
+
+        // Optional parameters: def foo(a = 1, b = "hello")
+        for node in params_node.optionals().iter() {
+            if let Some(opt_param) = node.as_optional_parameter_node() {
+                let name = String::from_utf8_lossy(opt_param.name().as_slice()).to_string();
+                let default_value = opt_param.value();
+
+                // Process default value to get its type
+                if let Some(default_vtx) = self.install_node(&default_value) {
+                    install_optional_parameter(
+                        self.genv,
+                        self.lenv,
+                        &mut self.changes,
+                        name,
+                        default_vtx,
+                    );
+                } else {
+                    // Fallback to untyped if default can't be processed
+                    install_required_parameter(self.genv, self.lenv, name);
+                }
+            }
+        }
+
+        // Rest parameter: def foo(*args)
+        if let Some(rest_node) = params_node.rest() {
+            if let Some(rest_param) = rest_node.as_rest_parameter_node() {
+                if let Some(name_id) = rest_param.name() {
+                    let name = String::from_utf8_lossy(name_id.as_slice()).to_string();
+                    install_rest_parameter(self.genv, self.lenv, name);
+                }
+            }
+        }
+
+        // Keyword rest parameter: def foo(**kwargs)
+        if let Some(kwrest_node) = params_node.keyword_rest() {
+            if let Some(kwrest_param) = kwrest_node.as_keyword_rest_parameter_node() {
+                if let Some(name_id) = kwrest_param.name() {
+                    let name = String::from_utf8_lossy(name_id.as_slice()).to_string();
+                    install_keyword_rest_parameter(self.genv, self.lenv, name);
+                }
+            }
+        }
     }
 
     /// Process multiple statements
