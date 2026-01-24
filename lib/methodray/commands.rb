@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
+require_relative 'binary_locator'
+
 module MethodRay
   module Commands
-    COMMANDS_DIR = __dir__
-
     class << self
       def help
         puts <<~HELP
@@ -41,7 +41,7 @@ module MethodRay
       private
 
       def exec_rust_cli(command, args)
-        binary_path = find_rust_binary
+        binary_path = BinaryLocator.new.find
 
         unless binary_path
           warn 'Error: CLI binary not found.'
@@ -55,23 +55,6 @@ module MethodRay
         end
 
         exec(binary_path, command, *args)
-      end
-
-      def find_rust_binary
-        # Platform-specific binary name
-        cli_binary = Gem.win_platform? ? 'methodray-cli.exe' : 'methodray-cli'
-        legacy_binary = Gem.win_platform? ? 'methodray.exe' : 'methodray'
-
-        candidates = [
-          # CLI binary built during gem install (lib/methodray directory)
-          File.expand_path(cli_binary, COMMANDS_DIR),
-          # Development: target/release (project root)
-          File.expand_path("../../target/release/#{cli_binary}", COMMANDS_DIR),
-          # Development: rust/target/release (legacy standalone binary)
-          File.expand_path("../../rust/target/release/#{legacy_binary}", COMMANDS_DIR)
-        ]
-
-        candidates.find { |path| File.executable?(path) }
       end
     end
   end

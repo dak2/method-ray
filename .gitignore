@@ -23,4 +23,4 @@ vendor/
 tmp/
 
 # Claude 
-.claude/Claude.local.md
+.claude/Claude.local*.md
