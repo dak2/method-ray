@@ -187,12 +187,23 @@ impl GlobalEnv {
         scope_id
     }
 
+    /// Enter a module scope
+    pub fn enter_module(&mut self, name: String) -> ScopeId {
+        let scope_id = self.scope_manager.new_scope(ScopeKind::Module { name });
+        self.scope_manager.enter_scope(scope_id);
+        scope_id
+    }
+
     /// Enter a method scope
     pub fn enter_method(&mut self, name: String) -> ScopeId {
-        let class_name = self.scope_manager.current_class_name();
+        // Look for class or module context
+        let receiver_type = self
+            .scope_manager
+            .current_class_name()
+            .or_else(|| self.scope_manager.current_module_name());
         let scope_id = self.scope_manager.new_scope(ScopeKind::Method {
             name,
-            receiver_type: class_name,
+            receiver_type,
         });
         self.scope_manager.enter_scope(scope_id);
         scope_id

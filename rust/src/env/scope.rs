@@ -1,11 +1,11 @@
 use crate::graph::VertexId;
 use std::collections::HashMap;
 
-/// スコープID
+/// Scope ID
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ScopeId(pub usize);
 
-/// スコープの種類
+/// Scope kind
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum ScopeKind {
@@ -19,12 +19,12 @@ pub enum ScopeKind {
     },
     Method {
         name: String,
-        receiver_type: Option<String>, // レシーバーのクラス名
+        receiver_type: Option<String>, // Receiver class/module name
     },
     Block,
 }
 
-/// スコープ情報
+/// Scope information
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct Scope {
@@ -32,13 +32,13 @@ pub struct Scope {
     pub kind: ScopeKind,
     pub parent: Option<ScopeId>,
 
-    /// ローカル変数
+    /// Local variables
     pub local_vars: HashMap<String, VertexId>,
 
-    /// インスタンス変数（クラス/メソッドスコープのみ）
+    /// Instance variables (class/module scope only)
     pub instance_vars: HashMap<String, VertexId>,
 
-    /// クラス変数（クラススコープのみ）
+    /// Class variables (class scope only)
     pub class_vars: HashMap<String, VertexId>,
 }
 
@@ -55,28 +55,28 @@ impl Scope {
         }
     }
 
-    /// ローカル変数を追加
+    /// Add local variable
     pub fn set_local_var(&mut self, name: String, vtx: VertexId) {
         self.local_vars.insert(name, vtx);
     }
 
-    /// ローカル変数を取得
+    /// Get local variable
     pub fn get_local_var(&self, name: &str) -> Option<VertexId> {
         self.local_vars.get(name).copied()
     }
 
-    /// インスタンス変数を追加
+    /// Add instance variable
     pub fn set_instance_var(&mut self, name: String, vtx: VertexId) {
         self.instance_vars.insert(name, vtx);
     }
 
-    /// インスタンス変数を取得
+    /// Get instance variable
     pub fn get_instance_var(&self, name: &str) -> Option<VertexId> {
         self.instance_vars.get(name).copied()
     }
 }
 
-/// スコープマネージャー
+/// Scope manager
 #[derive(Debug)]
 pub struct ScopeManager {
     scopes: HashMap<ScopeId, Scope>,
@@ -99,7 +99,7 @@ impl ScopeManager {
         }
     }
 
-    /// 新しいスコープを作成
+    /// Create a new scope
     pub fn new_scope(&mut self, kind: ScopeKind) -> ScopeId {
         let id = ScopeId(self.next_id);
         self.next_id += 1;
@@ -110,12 +110,12 @@ impl ScopeManager {
         id
     }
 
-    /// スコープに入る
+    /// Enter a scope
     pub fn enter_scope(&mut self, scope_id: ScopeId) {
         self.current_scope = scope_id;
     }
 
-    /// スコープから出る
+    /// Exit current scope
     pub fn exit_scope(&mut self) {
         if let Some(scope) = self.scopes.get(&self.current_scope) {
             if let Some(parent) = scope.parent {
@@ -124,27 +124,27 @@ impl ScopeManager {
         }
     }
 
-    /// 現在のスコープを取得
+    /// Get current scope
     pub fn current_scope(&self) -> &Scope {
         self.scopes.get(&self.current_scope).unwrap()
     }
 
-    /// 現在のスコープを可変で取得
+    /// Get current scope mutably
     pub fn current_scope_mut(&mut self) -> &mut Scope {
         self.scopes.get_mut(&self.current_scope).unwrap()
     }
 
-    /// スコープを取得
+    /// Get scope by ID
     pub fn get_scope(&self, id: ScopeId) -> Option<&Scope> {
         self.scopes.get(&id)
     }
 
-    /// スコープを可変で取得
+    /// Get scope by ID mutably
     pub fn get_scope_mut(&mut self, id: ScopeId) -> Option<&mut Scope> {
         self.scopes.get_mut(&id)
     }
 
-    /// 変数を現在のスコープまたは親スコープから検索
+    /// Lookup variable in current scope or parent scopes
     pub fn lookup_var(&self, name: &str) -> Option<VertexId> {
         let mut current = Some(self.current_scope);
 
@@ -162,13 +162,13 @@ impl ScopeManager {
         None
     }
 
-    /// インスタンス変数を現在のクラススコープから検索
+    /// Lookup instance variable in enclosing class scope
     pub fn lookup_instance_var(&self, name: &str) -> Option<VertexId> {
         let mut current = Some(self.current_scope);
 
         while let Some(scope_id) = current {
             if let Some(scope) = self.scopes.get(&scope_id) {
-                // クラススコープまで遡る
+                // Walk up to class scope
                 match &scope.kind {
                     ScopeKind::Class { .. } => {
                         return scope.get_instance_var(name);
@@ -185,13 +185,13 @@ impl ScopeManager {
         None
     }
 
-    /// インスタンス変数を現在のクラススコープに設定
+    /// Set instance variable in enclosing class scope
     pub fn set_instance_var_in_class(&mut self, name: String, vtx: VertexId) {
         let mut current = Some(self.current_scope);
 
         while let Some(scope_id) = current {
             if let Some(scope) = self.scopes.get(&scope_id) {
-                // クラススコープを見つけたら設定
+                // Find class scope and set variable
                 match &scope.kind {
                     ScopeKind::Class { .. } => {
                         if let Some(class_scope) = self.scopes.get_mut(&scope_id) {
@@ -209,7 +209,7 @@ impl ScopeManager {
         }
     }
 
-    /// 現在のクラス名を取得
+    /// Get current class name
     pub fn current_class_name(&self) -> Option<String> {
         let mut current = Some(self.current_scope);
 
@@ -225,6 +225,69 @@ impl ScopeManager {
         }
 
         None
+    }
+
+    /// Get current module name
+    pub fn current_module_name(&self) -> Option<String> {
+        let mut current = Some(self.current_scope);
+
+        while let Some(scope_id) = current {
+            if let Some(scope) = self.scopes.get(&scope_id) {
+                if let ScopeKind::Module { name } = &scope.kind {
+                    return Some(name.clone());
+                }
+                current = scope.parent;
+            } else {
+                break;
+            }
+        }
+
+        None
+    }
+
+    /// Lookup instance variable in enclosing module scope
+    pub fn lookup_instance_var_in_module(&self, name: &str) -> Option<VertexId> {
+        let mut current = Some(self.current_scope);
+
+        while let Some(scope_id) = current {
+            if let Some(scope) = self.scopes.get(&scope_id) {
+                match &scope.kind {
+                    ScopeKind::Module { .. } => {
+                        return scope.get_instance_var(name);
+                    }
+                    _ => {
+                        current = scope.parent;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+
+        None
+    }
+
+    /// Set instance variable in enclosing module scope
+    pub fn set_instance_var_in_module(&mut self, name: String, vtx: VertexId) {
+        let mut current = Some(self.current_scope);
+
+        while let Some(scope_id) = current {
+            if let Some(scope) = self.scopes.get(&scope_id) {
+                match &scope.kind {
+                    ScopeKind::Module { .. } => {
+                        if let Some(module_scope) = self.scopes.get_mut(&scope_id) {
+                            module_scope.set_instance_var(name, vtx);
+                        }
+                        return;
+                    }
+                    _ => {
+                        current = scope.parent;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
     }
 }
 
@@ -326,5 +389,60 @@ mod tests {
 
         // Should still find parent class name
         assert_eq!(sm.current_class_name(), Some("User".to_string()));
+    }
+
+    #[test]
+    fn test_scope_manager_module_scope() {
+        let mut sm = ScopeManager::new();
+
+        assert_eq!(sm.current_module_name(), None);
+
+        let module_id = sm.new_scope(ScopeKind::Module {
+            name: "Utils".to_string(),
+        });
+        sm.enter_scope(module_id);
+
+        assert_eq!(sm.current_module_name(), Some("Utils".to_string()));
+
+        // Enter method within module
+        let method_id = sm.new_scope(ScopeKind::Method {
+            name: "helper".to_string(),
+            receiver_type: Some("Utils".to_string()),
+        });
+        sm.enter_scope(method_id);
+
+        // Should still find parent module name
+        assert_eq!(sm.current_module_name(), Some("Utils".to_string()));
+
+        sm.exit_scope(); // exit method
+        sm.exit_scope(); // exit module
+
+        assert_eq!(sm.current_module_name(), None);
+    }
+
+    #[test]
+    fn test_scope_manager_module_instance_var() {
+        let mut sm = ScopeManager::new();
+
+        let module_id = sm.new_scope(ScopeKind::Module {
+            name: "Config".to_string(),
+        });
+        sm.enter_scope(module_id);
+
+        // Set instance variable in module
+        sm.set_instance_var_in_module("@setting".to_string(), VertexId(100));
+
+        // Enter method within module
+        let method_id = sm.new_scope(ScopeKind::Method {
+            name: "get_setting".to_string(),
+            receiver_type: Some("Config".to_string()),
+        });
+        sm.enter_scope(method_id);
+
+        // Should find instance variable from module scope
+        assert_eq!(
+            sm.lookup_instance_var_in_module("@setting"),
+            Some(VertexId(100))
+        );
     }
 }

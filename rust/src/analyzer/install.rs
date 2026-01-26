@@ -9,7 +9,10 @@ use crate::graph::{BlockParameterTypeBox, ChangeSet, VertexId};
 use ruby_prism::Node;
 
 use super::blocks::{enter_block_scope, exit_block_scope, install_block_parameter};
-use super::definitions::{exit_scope, extract_class_name, install_class, install_method};
+use super::definitions::{
+    exit_scope, extract_class_name, extract_module_name, install_class, install_method,
+    install_module,
+};
 use super::dispatch::{
     dispatch_needs_child, dispatch_simple, finish_ivar_write, finish_local_var_write,
     finish_method_call, DispatchResult, NeedsChildKind,
@@ -43,6 +46,11 @@ impl<'a> AstInstaller<'a> {
         // Class definition
         if let Some(class_node) = node.as_class_node() {
             return self.install_class_node(&class_node);
+        }
+
+        // Module definition
+        if let Some(module_node) = node.as_module_node() {
+            return self.install_module_node(&module_node);
         }
 
         // Method definition
@@ -188,6 +196,21 @@ impl<'a> AstInstaller<'a> {
         install_class(self.genv, class_name);
 
         if let Some(body) = class_node.body() {
+            if let Some(statements) = body.as_statements_node() {
+                self.install_statements(&statements);
+            }
+        }
+
+        exit_scope(self.genv);
+        None
+    }
+
+    /// Install module definition
+    fn install_module_node(&mut self, module_node: &ruby_prism::ModuleNode) -> Option<VertexId> {
+        let module_name = extract_module_name(module_node);
+        install_module(self.genv, module_name);
+
+        if let Some(body) = module_node.body() {
             if let Some(statements) = body.as_statements_node() {
                 self.install_statements(&statements);
             }
@@ -486,5 +509,67 @@ y = x.upcase
 
         assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "String");
         assert_eq!(genv.get_vertex(y_vtx).unwrap().show(), "String");
+    }
+
+    #[test]
+    fn test_install_module_with_method() {
+        let source = r#"
+module Utils
+  def helper
+    x = "test"
+  end
+end
+"#;
+        let parse_result = parse_ruby_source(source, "test.rb".to_string()).unwrap();
+
+        let mut genv = GlobalEnv::new();
+        let mut lenv = LocalEnv::new();
+        let mut installer = AstInstaller::new(&mut genv, &mut lenv, source);
+
+        let root = parse_result.node();
+        if let Some(program_node) = root.as_program_node() {
+            let statements = program_node.statements();
+            for stmt in &statements.body() {
+                installer.install_node(&stmt);
+            }
+        }
+
+        installer.finish();
+
+        // After processing, we should be back at top-level scope
+        assert_eq!(genv.scope_manager.current_module_name(), None);
+        assert_eq!(genv.scope_manager.current_class_name(), None);
+    }
+
+    #[test]
+    fn test_install_nested_module_class() {
+        let source = r#"
+module Api
+  class User
+    def greet
+      name = "hello"
+    end
+  end
+end
+"#;
+        let parse_result = parse_ruby_source(source, "test.rb".to_string()).unwrap();
+
+        let mut genv = GlobalEnv::new();
+        let mut lenv = LocalEnv::new();
+        let mut installer = AstInstaller::new(&mut genv, &mut lenv, source);
+
+        let root = parse_result.node();
+        if let Some(program_node) = root.as_program_node() {
+            let statements = program_node.statements();
+            for stmt in &statements.body() {
+                installer.install_node(&stmt);
+            }
+        }
+
+        installer.finish();
+
+        // After processing, we should be back at top-level scope
+        assert_eq!(genv.scope_manager.current_module_name(), None);
+        assert_eq!(genv.scope_manager.current_class_name(), None);
     }
 }
