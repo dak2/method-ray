@@ -73,9 +73,7 @@ fn load_rbs_from_cache(genv: &mut GlobalEnv) -> Result<()> {
     let methods = cache.methods();
 
     for method_info in methods {
-        let receiver_type = Type::Instance {
-            class_name: method_info.receiver_class.clone(),
-        };
+        let receiver_type = Type::instance(&method_info.receiver_class);
 
         // Convert block param type strings to Type enums
         let block_param_types = method_info.block_param_types.as_ref().map(|types| {

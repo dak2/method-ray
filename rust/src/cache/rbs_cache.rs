@@ -33,9 +33,7 @@ pub struct SerializableMethodInfo {
 impl SerializableMethodInfo {
     /// Parse return type string into Type (simple parser for cached data)
     pub fn return_type(&self) -> crate::types::Type {
-        crate::types::Type::Instance {
-            class_name: self.return_type_str.clone(),
-        }
+        crate::types::Type::instance(&self.return_type_str)
     }
 }
 

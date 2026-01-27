@@ -166,9 +166,7 @@ pub fn register_rbs_methods(genv: &mut GlobalEnv, ruby: &Ruby) -> Result<usize, 
 
     let count = methods.len();
     for method_info in methods {
-        let receiver_type = Type::Instance {
-            class_name: method_info.receiver_class,
-        };
+        let receiver_type = Type::instance(&method_info.receiver_class);
         // Convert block param type strings to Type enums
         let block_param_types = method_info.block_param_types.map(|types| {
             types

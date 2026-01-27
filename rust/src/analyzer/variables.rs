@@ -45,13 +45,12 @@ pub fn install_ivar_read(genv: &GlobalEnv, ivar_name: &str) -> Option<VertexId> 
 }
 
 /// Install self node
+/// Uses the fully qualified name if available (e.g., Api::V1::User instead of just User)
 pub fn install_self(genv: &mut GlobalEnv) -> VertexId {
-    if let Some(class_name) = genv.scope_manager.current_class_name() {
-        genv.new_source(Type::Instance { class_name })
+    if let Some(qualified_name) = genv.scope_manager.current_qualified_name() {
+        genv.new_source(Type::instance(&qualified_name))
     } else {
-        genv.new_source(Type::Instance {
-            class_name: "Object".to_string(),
-        })
+        genv.new_source(Type::instance("Object"))
     }
 }
 

@@ -152,7 +152,9 @@ impl BlockParameterTypeBox {
     /// - Hash[K, V]: K → type_args[0], V → type_args[1]
     fn resolve_type_variable(ty: &Type, recv_ty: &Type) -> Option<Type> {
         let type_var_name = match ty {
-            Type::Instance { class_name } if Self::is_type_variable_name(class_name) => class_name,
+            Type::Instance { name } if Self::is_type_variable_name(name.full_name()) => {
+                name.full_name()
+            }
             _ => return None, // Not a type variable
         };
 
@@ -161,7 +163,7 @@ impl BlockParameterTypeBox {
         let class_name = recv_ty.base_class_name()?;
 
         // Map type variable to type argument index based on class
-        let index = match (class_name, type_var_name.as_str()) {
+        let index = match (class_name, type_var_name) {
             // Array[Elem]
             ("Array", "Elem") => 0,
             ("Array", "T") => 0,
@@ -217,11 +219,11 @@ impl BoxTrait for BlockParameterTypeBox {
 
                         // Try to resolve type variable from receiver's type arguments
                         let resolved_type =
-                            if let Some(resolved) = Self::resolve_type_variable(&param_type, &recv_ty) {
+                            if let Some(resolved) = Self::resolve_type_variable(param_type, &recv_ty) {
                                 // Type variable resolved (e.g., Elem → Integer)
                                 resolved
-                            } else if let Type::Instance { class_name } = &param_type {
-                                if Self::is_type_variable_name(class_name) {
+                            } else if let Type::Instance { name } = &param_type {
+                                if Self::is_type_variable_name(name.full_name()) {
                                     // Type variable couldn't be resolved, skip
                                     continue;
                                 } else {
@@ -358,9 +360,7 @@ mod tests {
             Type::array(),
             "each",
             Type::array(),
-            Some(vec![Type::Instance {
-                class_name: "Elem".to_string(),
-            }]),
+            Some(vec![Type::instance("Elem")]),
         );
 
         let recv_vtx = genv.new_vertex();
@@ -428,9 +428,7 @@ mod tests {
             Type::array(),
             "each",
             Type::array(),
-            Some(vec![Type::Instance {
-                class_name: "Elem".to_string(),
-            }]),
+            Some(vec![Type::instance("Elem")]),
         );
 
         // Create receiver vertex with Array[Integer] type
@@ -464,14 +462,7 @@ mod tests {
             Type::hash(),
             "each",
             Type::hash(),
-            Some(vec![
-                Type::Instance {
-                    class_name: "K".to_string(),
-                },
-                Type::Instance {
-                    class_name: "V".to_string(),
-                },
-            ]),
+            Some(vec![Type::instance("K"), Type::instance("V")]),
         );
 
         // Create receiver vertex with Hash[String, Integer] type
