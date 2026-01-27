@@ -18,6 +18,7 @@ path = "src/lsp/main.rs"
 required-features = ["lsp"]
 
 [dependencies]
+smallvec = "1.13"
 rayon = "1.10"
 walkdir = "2.5"
 anyhow = "1.0"

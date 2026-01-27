@@ -209,7 +209,7 @@ impl ScopeManager {
         }
     }
 
-    /// Get current class name
+    /// Get current class name (simple name, not qualified)
     pub fn current_class_name(&self) -> Option<String> {
         let mut current = Some(self.current_scope);
 
@@ -227,7 +227,7 @@ impl ScopeManager {
         None
     }
 
-    /// Get current module name
+    /// Get current module name (simple name, not qualified)
     pub fn current_module_name(&self) -> Option<String> {
         let mut current = Some(self.current_scope);
 
@@ -243,6 +243,70 @@ impl ScopeManager {
         }
 
         None
+    }
+
+    /// Get current fully qualified name by traversing all parent class/module scopes
+    ///
+    /// For example, in:
+    /// ```ruby
+    /// module Api
+    ///   module V1
+    ///     class User
+    ///       def greet; end
+    ///     end
+    ///   end
+    /// end
+    /// ```
+    /// When inside `greet`, this returns `Some("Api::V1::User")`
+    pub fn current_qualified_name(&self) -> Option<String> {
+        let mut path_segments: Vec<String> = Vec::new();
+        let mut current = Some(self.current_scope);
+
+        // Traverse from current scope up to top-level, collecting class/module names
+        while let Some(scope_id) = current {
+            if let Some(scope) = self.scopes.get(&scope_id) {
+                match &scope.kind {
+                    ScopeKind::Class { name, .. } => {
+                        // If the name already contains ::, it's a qualified name from AST
+                        // (e.g., `class Api::User` defined at top level)
+                        if name.contains("::") {
+                            path_segments.push(name.clone());
+                        } else {
+                            path_segments.push(name.clone());
+                        }
+                    }
+                    ScopeKind::Module { name } => {
+                        if name.contains("::") {
+                            path_segments.push(name.clone());
+                        } else {
+                            path_segments.push(name.clone());
+                        }
+                    }
+                    _ => {}
+                }
+                current = scope.parent;
+            } else {
+                break;
+            }
+        }
+
+        if path_segments.is_empty() {
+            return None;
+        }
+
+        // Reverse to get from outermost to innermost
+        path_segments.reverse();
+
+        // Join all segments, handling cases where segments may already contain ::
+        let mut result = String::new();
+        for segment in path_segments {
+            if !result.is_empty() {
+                result.push_str("::");
+            }
+            result.push_str(&segment);
+        }
+
+        Some(result)
     }
 
     /// Lookup instance variable in enclosing module scope
@@ -444,5 +508,89 @@ mod tests {
             sm.lookup_instance_var_in_module("@setting"),
             Some(VertexId(100))
         );
+    }
+
+    #[test]
+    fn test_current_qualified_name_simple_class() {
+        let mut sm = ScopeManager::new();
+
+        // module Api; class User; end; end
+        let class_id = sm.new_scope(ScopeKind::Class {
+            name: "User".to_string(),
+            superclass: None,
+        });
+        sm.enter_scope(class_id);
+
+        assert_eq!(
+            sm.current_qualified_name(),
+            Some("User".to_string())
+        );
+    }
+
+    #[test]
+    fn test_current_qualified_name_nested_module_class() {
+        let mut sm = ScopeManager::new();
+
+        // module Api
+        let api_id = sm.new_scope(ScopeKind::Module {
+            name: "Api".to_string(),
+        });
+        sm.enter_scope(api_id);
+
+        // module V1
+        let v1_id = sm.new_scope(ScopeKind::Module {
+            name: "V1".to_string(),
+        });
+        sm.enter_scope(v1_id);
+
+        // class User
+        let user_id = sm.new_scope(ScopeKind::Class {
+            name: "User".to_string(),
+            superclass: None,
+        });
+        sm.enter_scope(user_id);
+
+        assert_eq!(
+            sm.current_qualified_name(),
+            Some("Api::V1::User".to_string())
+        );
+
+        // def greet
+        let method_id = sm.new_scope(ScopeKind::Method {
+            name: "greet".to_string(),
+            receiver_type: None,
+        });
+        sm.enter_scope(method_id);
+
+        // Inside method, should still get the qualified class name
+        assert_eq!(
+            sm.current_qualified_name(),
+            Some("Api::V1::User".to_string())
+        );
+    }
+
+    #[test]
+    fn test_current_qualified_name_with_inline_qualified_class() {
+        let mut sm = ScopeManager::new();
+
+        // class Api::User (defined at top level with qualified name)
+        let class_id = sm.new_scope(ScopeKind::Class {
+            name: "Api::User".to_string(),
+            superclass: None,
+        });
+        sm.enter_scope(class_id);
+
+        assert_eq!(
+            sm.current_qualified_name(),
+            Some("Api::User".to_string())
+        );
+    }
+
+    #[test]
+    fn test_current_qualified_name_at_top_level() {
+        let sm = ScopeManager::new();
+
+        // At top level, no class/module
+        assert_eq!(sm.current_qualified_name(), None);
     }
 }

@@ -39,23 +39,17 @@ pub fn install_literal(genv: &mut GlobalEnv, node: &Node) -> Option<VertexId> {
 
     // true
     if node.as_true_node().is_some() {
-        return Some(genv.new_source(Type::Instance {
-            class_name: "TrueClass".to_string(),
-        }));
+        return Some(genv.new_source(Type::instance("TrueClass")));
     }
 
     // false
     if node.as_false_node().is_some() {
-        return Some(genv.new_source(Type::Instance {
-            class_name: "FalseClass".to_string(),
-        }));
+        return Some(genv.new_source(Type::instance("FalseClass")));
     }
 
     // :symbol
     if node.as_symbol_node().is_some() {
-        return Some(genv.new_source(Type::Instance {
-            class_name: "Symbol".to_string(),
-        }));
+        return Some(genv.new_source(Type::symbol()));
     }
 
     None

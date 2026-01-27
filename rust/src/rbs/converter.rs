@@ -20,18 +20,12 @@ impl RbsTypeConverter {
 
         match type_name {
             "bool" => Type::Union(vec![
-                Type::Instance {
-                    class_name: "TrueClass".to_string(),
-                },
-                Type::Instance {
-                    class_name: "FalseClass".to_string(),
-                },
+                Type::instance("TrueClass"),
+                Type::instance("FalseClass"),
             ]),
             "void" | "nil" => Type::Nil,
             "untyped" | "top" => Type::Bot,
-            _ => Type::Instance {
-                class_name: type_name.to_string(),
-            },
+            _ => Type::instance(type_name),
         }
     }
 }
@@ -43,12 +37,23 @@ mod tests {
     #[test]
     fn test_parse_simple_types() {
         match RbsTypeConverter::parse("::String") {
-            Type::Instance { class_name } => assert_eq!(class_name, "String"),
+            Type::Instance { name } => assert_eq!(name.full_name(), "String"),
             _ => panic!("Expected Instance type"),
         }
 
         match RbsTypeConverter::parse("Integer") {
-            Type::Instance { class_name } => assert_eq!(class_name, "Integer"),
+            Type::Instance { name } => assert_eq!(name.full_name(), "Integer"),
+            _ => panic!("Expected Instance type"),
+        }
+    }
+
+    #[test]
+    fn test_parse_qualified_types() {
+        match RbsTypeConverter::parse("::Api::User") {
+            Type::Instance { name } => {
+                assert_eq!(name.full_name(), "Api::User");
+                assert_eq!(name.name(), "User");
+            }
             _ => panic!("Expected Instance type"),
         }
     }

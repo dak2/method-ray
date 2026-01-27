@@ -60,10 +60,8 @@ impl MethodRegistry {
         }
 
         // For generic types, fall back to base class
-        if let Type::Generic { class_name, .. } = recv_ty {
-            let base_type = Type::Instance {
-                class_name: class_name.clone(),
-            };
+        if let Type::Generic { name, .. } = recv_ty {
+            let base_type = Type::Instance { name: name.clone() };
             return self.methods.get(&(base_type, method_name.to_string()));
         }
 
@@ -81,9 +79,7 @@ mod tests {
         registry.register(Type::string(), "length", Type::integer());
 
         let info = registry.resolve(&Type::string(), "length").unwrap();
-        assert!(
-            matches!(info.return_type, Type::Instance { ref class_name, .. } if class_name == "Integer")
-        );
+        assert_eq!(info.return_type.base_class_name(), Some("Integer"));
     }
 
     #[test]
