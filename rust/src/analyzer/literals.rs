@@ -1,11 +1,11 @@
 //! Literal Handlers - Processing Ruby literal values
 //!
 //! This module is responsible for:
-//! - String, Integer, Float, Hash, Regexp, Range literals
+//! - String, Integer, Float, Regexp literals
 //! - nil, true, false, Symbol literals
 //! - Creating Source vertices with fixed types
 //!
-//! Note: Array literals are handled in install.rs for element type inference
+//! Note: Array, Hash, and Range literals are handled in install.rs for element type inference
 
 use crate::env::GlobalEnv;
 use crate::graph::VertexId;
@@ -14,7 +14,7 @@ use ruby_prism::Node;
 
 /// Install literal nodes and return their VertexId
 ///
-/// Note: Array literals are NOT handled here because they require
+/// Note: Array and Hash literals are NOT handled here because they require
 /// child processing for element type inference. See install.rs.
 pub fn install_literal(genv: &mut GlobalEnv, node: &Node) -> Option<VertexId> {
     // "hello"
@@ -30,11 +30,6 @@ pub fn install_literal(genv: &mut GlobalEnv, node: &Node) -> Option<VertexId> {
     // 3.14
     if node.as_float_node().is_some() {
         return Some(genv.new_source(Type::float()));
-    }
-
-    // {a: 1}
-    if node.as_hash_node().is_some() {
-        return Some(genv.new_source(Type::hash()));
     }
 
     // nil
@@ -60,11 +55,6 @@ pub fn install_literal(genv: &mut GlobalEnv, node: &Node) -> Option<VertexId> {
     // /pattern/
     if node.as_regular_expression_node().is_some() {
         return Some(genv.new_source(Type::regexp()));
-    }
-
-    // 1..5, "a".."z" (Range literal)
-    if node.as_range_node().is_some() {
-        return Some(genv.new_source(Type::range()));
     }
 
     None
@@ -106,13 +96,5 @@ mod tests {
 
         let vtx = genv.new_source(Type::regexp());
         assert_eq!(genv.get_source(vtx).unwrap().ty.show(), "Regexp");
-    }
-
-    #[test]
-    fn test_install_range_literal() {
-        let mut genv = GlobalEnv::new();
-
-        let vtx = genv.new_source(Type::range());
-        assert_eq!(genv.get_source(vtx).unwrap().ty.show(), "Range");
     }
 }

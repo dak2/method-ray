@@ -6,6 +6,7 @@
 
 use crate::env::{GlobalEnv, LocalEnv};
 use crate::graph::{BlockParameterTypeBox, ChangeSet, VertexId};
+use crate::types::Type;
 use ruby_prism::Node;
 
 use super::blocks::{enter_block_scope, exit_block_scope, install_block_parameter};
@@ -84,7 +85,7 @@ impl<'a> AstInstaller<'a> {
 
     /// Install literal node
     ///
-    /// Handles all literals including Array with element type inference
+    /// Handles all literals including Array and Hash with element type inference
     fn install_literal_node(&mut self, node: &Node) -> Option<VertexId> {
         // Array literals need special handling for element type inference
         if node.as_array_node().is_some() {
@@ -92,7 +93,18 @@ impl<'a> AstInstaller<'a> {
             return self.install_array_literal_elements(elements);
         }
 
-        // Other literals (String, Integer, Hash, nil, true, false, Symbol)
+        // Hash literals need special handling for key/value type inference
+        if node.as_hash_node().is_some() {
+            let elements: Vec<Node> = node.as_hash_node().unwrap().elements().iter().collect();
+            return self.install_hash_literal_elements(elements);
+        }
+
+        // Range literals need special handling for element type inference
+        if let Some(range_node) = node.as_range_node() {
+            return self.install_range_literal(&range_node);
+        }
+
+        // Other literals (String, Integer, nil, true, false, Symbol)
         install_literal(self.genv, node)
     }
 
@@ -131,6 +143,105 @@ impl<'a> AstInstaller<'a> {
         };
 
         Some(self.genv.new_source(array_type))
+    }
+
+    /// Install hash literal with element type inference
+    fn install_hash_literal_elements(&mut self, elements: Vec<Node>) -> Option<VertexId> {
+        use crate::types::Type;
+        use std::collections::HashSet;
+
+        if elements.is_empty() {
+            return Some(self.genv.new_source(Type::hash()));
+        }
+
+        let mut key_types: HashSet<Type> = HashSet::new();
+        let mut value_types: HashSet<Type> = HashSet::new();
+
+        for element in &elements {
+            if let Some(assoc_node) = element.as_assoc_node() {
+                // Infer key type
+                if let Some(key_vtx) = self.install_node(&assoc_node.key()) {
+                    if let Some(source) = self.genv.get_source(key_vtx) {
+                        key_types.insert(source.ty.clone());
+                    } else if let Some(vertex) = self.genv.get_vertex(key_vtx) {
+                        for ty in vertex.types.keys() {
+                            key_types.insert(ty.clone());
+                        }
+                    }
+                }
+
+                // Infer value type
+                if let Some(value_vtx) = self.install_node(&assoc_node.value()) {
+                    if let Some(source) = self.genv.get_source(value_vtx) {
+                        value_types.insert(source.ty.clone());
+                    } else if let Some(vertex) = self.genv.get_vertex(value_vtx) {
+                        for ty in vertex.types.keys() {
+                            value_types.insert(ty.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        let hash_type = if key_types.is_empty() || value_types.is_empty() {
+            Type::hash()
+        } else {
+            // Build key type (single type or union)
+            let key_type = if key_types.len() == 1 {
+                key_types.into_iter().next().unwrap()
+            } else {
+                let types_vec: Vec<Type> = key_types.into_iter().collect();
+                Type::Union(types_vec)
+            };
+
+            // Build value type (single type or union)
+            let value_type = if value_types.len() == 1 {
+                value_types.into_iter().next().unwrap()
+            } else {
+                let types_vec: Vec<Type> = value_types.into_iter().collect();
+                Type::Union(types_vec)
+            };
+
+            Type::hash_of(key_type, value_type)
+        };
+
+        Some(self.genv.new_source(hash_type))
+    }
+
+    /// Install range literal with element type inference
+    fn install_range_literal(&mut self, range_node: &ruby_prism::RangeNode) -> Option<VertexId> {
+        // Try to infer element type from left or right endpoint
+        let element_type = if let Some(left) = range_node.left() {
+            self.infer_range_element_type(&left)
+        } else if let Some(right) = range_node.right() {
+            self.infer_range_element_type(&right)
+        } else {
+            None
+        };
+
+        let range_type = match element_type {
+            Some(ty) => Type::range_of(ty),
+            None => Type::range(),
+        };
+
+        Some(self.genv.new_source(range_type))
+    }
+
+    /// Infer element type from a range endpoint node
+    fn infer_range_element_type(&mut self, node: &Node) -> Option<Type> {
+        // Install the node and get its type
+        if let Some(vtx) = self.install_node(node) {
+            if let Some(source) = self.genv.get_source(vtx) {
+                return Some(source.ty.clone());
+            }
+            if let Some(vertex) = self.genv.get_vertex(vtx) {
+                // Get first type from vertex (simplified)
+                if let Some(ty) = vertex.types.keys().next() {
+                    return Some(ty.clone());
+                }
+            }
+        }
+        None
     }
 
     /// Process nodes that need child evaluation first

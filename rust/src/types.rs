@@ -269,6 +269,14 @@ impl Type {
             type_args: vec![key_type, value_type],
         }
     }
+
+    /// Create a generic Range type: Range[element_type]
+    pub fn range_of(element_type: Type) -> Self {
+        Type::Generic {
+            name: QualifiedName::simple("Range"),
+            type_args: vec![element_type],
+        }
+    }
 }
 
 #[cfg(test)]
