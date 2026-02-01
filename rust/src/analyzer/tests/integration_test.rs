@@ -546,7 +546,7 @@ fn test_range_literal_basic() {
     let (genv, lenv) = analyze(source);
 
     let x_vtx = lenv.get_var("x").unwrap();
-    assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Range");
+    assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Range[Integer]");
 }
 
 #[test]
@@ -556,7 +556,7 @@ fn test_range_literal_exclusive() {
     let (genv, lenv) = analyze(source);
 
     let x_vtx = lenv.get_var("x").unwrap();
-    assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Range");
+    assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Range[Integer]");
 }
 
 #[test]
@@ -566,7 +566,64 @@ fn test_range_literal_string() {
     let (genv, lenv) = analyze(source);
 
     let x_vtx = lenv.get_var("x").unwrap();
-    assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Range");
+    assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Range[String]");
+}
+
+#[test]
+fn test_range_generic_float() {
+    let source = r#"x = 1.0..5.0"#;
+
+    let (genv, lenv) = analyze(source);
+
+    let x_vtx = lenv.get_var("x").unwrap();
+    assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Range[Float]");
+}
+
+// ============================================
+// Nested Generic Array Tests
+// ============================================
+
+#[test]
+fn test_nested_array_integer() {
+    let source = r#"x = [[1, 2], [3]]"#;
+
+    let (genv, lenv) = analyze(source);
+
+    let x_vtx = lenv.get_var("x").unwrap();
+    assert_eq!(
+        genv.get_vertex(x_vtx).unwrap().show(),
+        "Array[Array[Integer]]"
+    );
+}
+
+#[test]
+fn test_deeply_nested_array() {
+    let source = r#"x = [[[1]]]"#;
+
+    let (genv, lenv) = analyze(source);
+
+    let x_vtx = lenv.get_var("x").unwrap();
+    assert_eq!(
+        genv.get_vertex(x_vtx).unwrap().show(),
+        "Array[Array[Array[Integer]]]"
+    );
+}
+
+#[test]
+fn test_nested_array_mixed() {
+    let source = r#"x = [[1], ["a"]]"#;
+
+    let (genv, lenv) = analyze(source);
+
+    let x_vtx = lenv.get_var("x").unwrap();
+    // Union type order may vary, so check for either order
+    let result = genv.get_vertex(x_vtx).unwrap().show();
+    assert!(
+        result == "Array[Array[Integer] | Array[String]]"
+            || result == "Array[Array[String] | Array[Integer]]",
+        "Expected nested array with union, got: {}",
+        result
+    );
 }
 
 #[test]
@@ -603,4 +660,74 @@ b = x.size
 
     let b_vtx = lenv.get_var("b").unwrap();
     assert_eq!(genv.get_vertex(b_vtx).unwrap().show(), "Integer");
+}
+
+// ============================================
+// Hash Generic Type Tests
+// ============================================
+
+#[test]
+fn test_hash_symbol_integer() {
+    let source = r#"x = { a: 1, b: 2 }"#;
+
+    let (genv, lenv) = analyze(source);
+
+    let x_vtx = lenv.get_var("x").unwrap();
+    assert_eq!(
+        genv.get_vertex(x_vtx).unwrap().show(),
+        "Hash[Symbol, Integer]"
+    );
+}
+
+#[test]
+fn test_hash_string_string() {
+    let source = r#"x = { "k" => "v" }"#;
+
+    let (genv, lenv) = analyze(source);
+
+    let x_vtx = lenv.get_var("x").unwrap();
+    assert_eq!(
+        genv.get_vertex(x_vtx).unwrap().show(),
+        "Hash[String, String]"
+    );
+}
+
+#[test]
+fn test_hash_mixed_values() {
+    let source = r#"x = { a: 1, b: "x" }"#;
+
+    let (genv, lenv) = analyze(source);
+
+    let x_vtx = lenv.get_var("x").unwrap();
+    let result = genv.get_vertex(x_vtx).unwrap().show();
+    // Union type order may vary
+    assert!(
+        result == "Hash[Symbol, Integer | String]"
+            || result == "Hash[Symbol, String | Integer]",
+        "Expected Hash with union value type, got: {}",
+        result
+    );
+}
+
+#[test]
+fn test_hash_empty() {
+    let source = r#"x = {}"#;
+
+    let (genv, lenv) = analyze(source);
+
+    let x_vtx = lenv.get_var("x").unwrap();
+    assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Hash");
+}
+
+#[test]
+fn test_hash_nested() {
+    let source = r#"x = { a: [1] }"#;
+
+    let (genv, lenv) = analyze(source);
+
+    let x_vtx = lenv.get_var("x").unwrap();
+    assert_eq!(
+        genv.get_vertex(x_vtx).unwrap().show(),
+        "Hash[Symbol, Array[Integer]]"
+    );
 }
