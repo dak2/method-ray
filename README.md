@@ -51,9 +51,9 @@ This will output:
 
 ```
 $ bundle exec methodray check app/models/user.rb
-app/models/user.rb:4:15: error: undefined method `abs` for String
+app/models/user.rb:4:19: error: undefined method `abs` for String
        message = name.abs
-                 ^
+                     ^
 ```
 
 ## Contributing
