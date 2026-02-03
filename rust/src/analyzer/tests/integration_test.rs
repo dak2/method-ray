@@ -731,3 +731,48 @@ fn test_hash_nested() {
         "Hash[Symbol, Array[Integer]]"
     );
 }
+
+// ============================================
+// Error Location Tests
+// ============================================
+
+#[test]
+fn test_error_location_points_to_dot() {
+    // Test that error location points to the dot operator, not the receiver
+    // "name.abs" - error should point to column 5 (the `.`)
+    let source = "name = \"x\"\nname.abs";
+
+    let (genv, _lenv) = analyze(source);
+
+    assert_eq!(genv.type_errors.len(), 1);
+    let error = &genv.type_errors[0];
+
+    // Location should be present
+    assert!(error.location.is_some());
+    let loc = error.location.as_ref().unwrap();
+
+    // Line 2, column 5 (1-indexed) - the dot position
+    assert_eq!(loc.line, 2);
+    assert_eq!(loc.column, 5); // "name" is 4 chars, "." is at column 5
+}
+
+#[test]
+fn test_error_location_method_chain() {
+    // Test error location in method chain: "x.upcase.foo"
+    // Error should point to the second dot (for undefined method `foo`)
+    let source = "x = \"hello\"\ny = x.upcase.foo";
+
+    let (genv, _lenv) = analyze(source);
+
+    assert_eq!(genv.type_errors.len(), 1);
+    let error = &genv.type_errors[0];
+    assert_eq!(error.method_name, "foo");
+
+    assert!(error.location.is_some());
+    let loc = error.location.as_ref().unwrap();
+
+    // Line 2, the second dot position
+    assert_eq!(loc.line, 2);
+    // "y = x.upcase" is 12 chars, "." is at column 13
+    assert_eq!(loc.column, 13);
+}

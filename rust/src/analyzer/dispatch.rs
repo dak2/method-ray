@@ -93,8 +93,12 @@ pub fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<NeedsCh
     if let Some(call_node) = node.as_call_node() {
         if let Some(receiver) = call_node.receiver() {
             let method_name = String::from_utf8_lossy(call_node.name().as_slice()).to_string();
+            // Use call_operator_loc (.) for error position, fallback to node location
+            let prism_location = call_node
+                .call_operator_loc()
+                .unwrap_or_else(|| node.location());
             let location =
-                SourceLocation::from_prism_location_with_source(&node.location(), source);
+                SourceLocation::from_prism_location_with_source(&prism_location, source);
 
             // Get block if present (e.g., `x.each { |i| ... }`)
             let block = call_node.block();
