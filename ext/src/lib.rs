@@ -6,7 +6,8 @@ use magnus::{function, method, prelude::*, Error, Ruby};
 use methodray_core::{
     analyzer::AstInstaller,
     env::{GlobalEnv, LocalEnv},
-    parser, rbs,
+    parser::ParseSession,
+    rbs,
 };
 
 #[magnus::wrap(class = "MethodRay::Analyzer")]
@@ -27,11 +28,11 @@ impl Analyzer {
     /// Execute type inference
     fn infer_types(&self, source: String) -> Result<String, Error> {
         // Parse
-        let parse_result =
-            parser::parse_ruby_source(&source, "source.rb".to_string()).map_err(|e| {
-                let ruby = unsafe { Ruby::get_unchecked() };
-                Error::new(ruby.exception_runtime_error(), e.to_string())
-            })?;
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(&source, "source.rb").map_err(|e| {
+            let ruby = unsafe { Ruby::get_unchecked() };
+            Error::new(ruby.exception_runtime_error(), e.to_string())
+        })?;
 
         // Build graph
         let mut genv = GlobalEnv::new();

@@ -1,7 +1,7 @@
 use crate::analyzer::AstInstaller;
 use crate::diagnostics::Diagnostic;
 use crate::env::{GlobalEnv, LocalEnv};
-use crate::parser;
+use crate::parser::ParseSession;
 use anyhow::{Context, Result};
 use std::path::Path;
 
@@ -30,8 +30,12 @@ impl FileChecker {
         let source = std::fs::read_to_string(file_path)
             .with_context(|| format!("Failed to read {}", file_path.display()))?;
 
+        // Create ParseSession (arena allocator) for this check
+        let session = ParseSession::new();
+
         // Parse file
-        let parse_result = parser::parse_ruby_file(file_path)
+        let parse_result = session
+            .parse_source(&source, &file_path.to_string_lossy())
             .with_context(|| format!("Failed to parse {}", file_path.display()))?;
 
         // Create fresh GlobalEnv for this analysis
@@ -56,7 +60,7 @@ impl FileChecker {
         let diagnostics = collect_diagnostics(&genv, file_path);
 
         Ok(diagnostics)
-    }
+    } // session drops here, freeing arena memory
 }
 
 /// Load RBS methods from cache (CLI mode without Ruby runtime)
