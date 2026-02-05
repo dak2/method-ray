@@ -8,12 +8,13 @@
 
 use crate::analyzer::AstInstaller;
 use crate::env::{GlobalEnv, LocalEnv};
-use crate::parser::parse_ruby_source;
+use crate::parser::ParseSession;
 use crate::types::Type;
 
 /// Helper to run analysis on Ruby source code
 fn analyze(source: &str) -> (GlobalEnv, LocalEnv) {
-    let parse_result = parse_ruby_source(source, "test.rb".to_string()).unwrap();
+    let session = ParseSession::new();
+    let parse_result = session.parse_source(source, "test.rb").unwrap();
 
     let mut genv = GlobalEnv::new();
 

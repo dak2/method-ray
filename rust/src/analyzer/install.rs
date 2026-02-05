@@ -536,13 +536,14 @@ impl<'a> AstInstaller<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::parse_ruby_source;
+    use crate::parser::ParseSession;
     use crate::types::Type;
 
     #[test]
     fn test_install_literal() {
         let source = r#"x = "hello""#;
-        let parse_result = parse_ruby_source(source, "test.rb".to_string()).unwrap();
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
 
         let mut genv = GlobalEnv::new();
         let mut lenv = LocalEnv::new();
@@ -568,7 +569,8 @@ mod tests {
 x = "hello"
 y = 42
 "#;
-        let parse_result = parse_ruby_source(source, "test.rb".to_string()).unwrap();
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
 
         let mut genv = GlobalEnv::new();
         let mut lenv = LocalEnv::new();
@@ -597,7 +599,8 @@ y = 42
 x = "hello"
 y = x.upcase
 "#;
-        let parse_result = parse_ruby_source(source, "test.rb".to_string()).unwrap();
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
 
         let mut genv = GlobalEnv::new();
         genv.register_builtin_method(Type::string(), "upcase", Type::string());
@@ -631,7 +634,8 @@ module Utils
   end
 end
 "#;
-        let parse_result = parse_ruby_source(source, "test.rb".to_string()).unwrap();
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
 
         let mut genv = GlobalEnv::new();
         let mut lenv = LocalEnv::new();
@@ -663,7 +667,8 @@ module Api
   end
 end
 "#;
-        let parse_result = parse_ruby_source(source, "test.rb".to_string()).unwrap();
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
 
         let mut genv = GlobalEnv::new();
         let mut lenv = LocalEnv::new();

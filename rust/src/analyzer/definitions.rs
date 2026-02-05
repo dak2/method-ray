@@ -79,7 +79,7 @@ fn extract_constant_path(node: &Node) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::parse_ruby_source;
+    use crate::parser::ParseSession;
 
     #[test]
     fn test_enter_exit_class_scope() {
@@ -150,7 +150,8 @@ mod tests {
     #[test]
     fn test_extract_simple_class_name() {
         let source = "class User; end";
-        let parse_result = parse_ruby_source(source, "test.rb".to_string()).unwrap();
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
         let root = parse_result.node();
         let program = root.as_program_node().unwrap();
         let stmt = program.statements().body().first().unwrap();
@@ -163,7 +164,8 @@ mod tests {
     #[test]
     fn test_extract_qualified_class_name() {
         let source = "class Api::User; end";
-        let parse_result = parse_ruby_source(source, "test.rb".to_string()).unwrap();
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
         let root = parse_result.node();
         let program = root.as_program_node().unwrap();
         let stmt = program.statements().body().first().unwrap();
@@ -176,7 +178,8 @@ mod tests {
     #[test]
     fn test_extract_deeply_qualified_class_name() {
         let source = "class Api::V1::Admin::User; end";
-        let parse_result = parse_ruby_source(source, "test.rb".to_string()).unwrap();
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
         let root = parse_result.node();
         let program = root.as_program_node().unwrap();
         let stmt = program.statements().body().first().unwrap();
@@ -189,7 +192,8 @@ mod tests {
     #[test]
     fn test_extract_simple_module_name() {
         let source = "module Utils; end";
-        let parse_result = parse_ruby_source(source, "test.rb".to_string()).unwrap();
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
         let root = parse_result.node();
         let program = root.as_program_node().unwrap();
         let stmt = program.statements().body().first().unwrap();
@@ -202,7 +206,8 @@ mod tests {
     #[test]
     fn test_extract_qualified_module_name() {
         let source = "module Api::V1; end";
-        let parse_result = parse_ruby_source(source, "test.rb".to_string()).unwrap();
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
         let root = parse_result.node();
         let program = root.as_program_node().unwrap();
         let stmt = program.statements().body().first().unwrap();
