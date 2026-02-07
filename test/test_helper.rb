@@ -12,7 +12,7 @@ module CLITestHelper
   private
 
   def run_check(source)
-    file = Tempfile.new(['check_test', '.rb'])
+    file = Tempfile.new(['integration_test', '.rb'])
     file.write(source)
     file.close
 
