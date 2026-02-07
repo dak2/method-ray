@@ -539,6 +539,54 @@ mod tests {
     use crate::parser::ParseSession;
     use crate::types::Type;
 
+    /// Helper to run full analysis pipeline on Ruby source code
+    fn analyze(source: &str) -> (GlobalEnv, LocalEnv) {
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
+
+        let mut genv = GlobalEnv::new();
+
+        genv.register_builtin_method(Type::string(), "upcase", Type::string());
+        genv.register_builtin_method(Type::string(), "downcase", Type::string());
+
+        genv.register_builtin_method(Type::float(), "to_s", Type::string());
+        genv.register_builtin_method(Type::float(), "to_i", Type::integer());
+        genv.register_builtin_method(Type::float(), "round", Type::integer());
+        genv.register_builtin_method(Type::float(), "ceil", Type::integer());
+        genv.register_builtin_method(Type::float(), "floor", Type::integer());
+        genv.register_builtin_method(Type::float(), "abs", Type::float());
+
+        genv.register_builtin_method(Type::array(), "each", Type::array());
+        genv.register_builtin_method(Type::array(), "map", Type::array());
+        genv.register_builtin_method(Type::hash(), "each", Type::hash());
+
+        genv.register_builtin_method(Type::regexp(), "match", Type::instance("MatchData"));
+        genv.register_builtin_method(Type::regexp(), "match?", Type::instance("TrueClass"));
+        genv.register_builtin_method(Type::regexp(), "source", Type::string());
+
+        genv.register_builtin_method(Type::range(), "to_a", Type::array());
+        genv.register_builtin_method(Type::range(), "size", Type::integer());
+        genv.register_builtin_method(Type::range(), "count", Type::integer());
+        genv.register_builtin_method(Type::range(), "first", Type::Bot);
+        genv.register_builtin_method(Type::range(), "last", Type::Bot);
+        genv.register_builtin_method(Type::range(), "include?", Type::instance("TrueClass"));
+        genv.register_builtin_method(Type::range(), "cover?", Type::instance("TrueClass"));
+
+        let mut lenv = LocalEnv::new();
+        let mut installer = AstInstaller::new(&mut genv, &mut lenv, source);
+
+        let root = parse_result.node();
+        if let Some(program_node) = root.as_program_node() {
+            let statements = program_node.statements();
+            for stmt in &statements.body() {
+                installer.install_node(&stmt);
+            }
+        }
+
+        installer.finish();
+        (genv, lenv)
+    }
+
     #[test]
     fn test_install_literal() {
         let source = r#"x = "hello""#;
@@ -687,5 +735,192 @@ end
         // After processing, we should be back at top-level scope
         assert_eq!(genv.scope_manager.current_module_name(), None);
         assert_eq!(genv.scope_manager.current_class_name(), None);
+    }
+
+    // ============================================
+    // Float Type Inference Tests
+    // ============================================
+
+    #[test]
+    fn test_float_literal_basic() {
+        let (genv, lenv) = analyze(r#"x = 3.14"#);
+        let x_vtx = lenv.get_var("x").unwrap();
+        assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Float");
+    }
+
+    #[test]
+    fn test_float_ceil() {
+        let (genv, lenv) = analyze("x = 3.14\na = x.ceil");
+        let a_vtx = lenv.get_var("a").unwrap();
+        assert_eq!(genv.get_vertex(a_vtx).unwrap().show(), "Integer");
+    }
+
+    #[test]
+    fn test_float_floor() {
+        let (genv, lenv) = analyze("x = 3.14\nb = x.floor");
+        let b_vtx = lenv.get_var("b").unwrap();
+        assert_eq!(genv.get_vertex(b_vtx).unwrap().show(), "Integer");
+    }
+
+    #[test]
+    fn test_float_abs() {
+        let (genv, lenv) = analyze("x = 3.14\nc = x.abs");
+        let c_vtx = lenv.get_var("c").unwrap();
+        assert_eq!(genv.get_vertex(c_vtx).unwrap().show(), "Float");
+    }
+
+    // ============================================
+    // Regexp Type Inference Tests
+    // ============================================
+
+    #[test]
+    fn test_regexp_literal_basic() {
+        let (genv, lenv) = analyze(r#"x = /hello/"#);
+        let x_vtx = lenv.get_var("x").unwrap();
+        assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Regexp");
+    }
+
+    #[test]
+    fn test_regexp_source() {
+        let (genv, lenv) = analyze("x = /hello/\na = x.source");
+        let a_vtx = lenv.get_var("a").unwrap();
+        assert_eq!(genv.get_vertex(a_vtx).unwrap().show(), "String");
+    }
+
+    // ============================================
+    // Range Type Inference Tests
+    // ============================================
+
+    #[test]
+    fn test_range_integer() {
+        let (genv, lenv) = analyze(r#"x = 1..5"#);
+        let x_vtx = lenv.get_var("x").unwrap();
+        assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Range[Integer]");
+    }
+
+    #[test]
+    fn test_range_exclusive() {
+        let (genv, lenv) = analyze(r#"x = 1...5"#);
+        let x_vtx = lenv.get_var("x").unwrap();
+        assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Range[Integer]");
+    }
+
+    #[test]
+    fn test_range_string() {
+        let (genv, lenv) = analyze(r#"x = "a".."z""#);
+        let x_vtx = lenv.get_var("x").unwrap();
+        assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Range[String]");
+    }
+
+    #[test]
+    fn test_range_float() {
+        let (genv, lenv) = analyze(r#"x = 1.0..5.0"#);
+        let x_vtx = lenv.get_var("x").unwrap();
+        assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Range[Float]");
+    }
+
+    #[test]
+    fn test_range_to_a() {
+        let (genv, lenv) = analyze("x = 1..10\na = x.to_a");
+        let a_vtx = lenv.get_var("a").unwrap();
+        assert_eq!(genv.get_vertex(a_vtx).unwrap().show(), "Array");
+    }
+
+    #[test]
+    fn test_range_size() {
+        let (genv, lenv) = analyze("x = 1..10\nb = x.size");
+        let b_vtx = lenv.get_var("b").unwrap();
+        assert_eq!(genv.get_vertex(b_vtx).unwrap().show(), "Integer");
+    }
+
+    // ============================================
+    // Nested Array Type Inference Tests
+    // ============================================
+
+    #[test]
+    fn test_nested_array_integer() {
+        let (genv, lenv) = analyze(r#"x = [[1, 2], [3]]"#);
+        let x_vtx = lenv.get_var("x").unwrap();
+        assert_eq!(
+            genv.get_vertex(x_vtx).unwrap().show(),
+            "Array[Array[Integer]]"
+        );
+    }
+
+    #[test]
+    fn test_deeply_nested_array() {
+        let (genv, lenv) = analyze(r#"x = [[[1]]]"#);
+        let x_vtx = lenv.get_var("x").unwrap();
+        assert_eq!(
+            genv.get_vertex(x_vtx).unwrap().show(),
+            "Array[Array[Array[Integer]]]"
+        );
+    }
+
+    #[test]
+    fn test_nested_array_mixed() {
+        let (genv, lenv) = analyze(r#"x = [[1], ["a"]]"#);
+        let x_vtx = lenv.get_var("x").unwrap();
+        let result = genv.get_vertex(x_vtx).unwrap().show();
+        assert!(
+            result == "Array[Array[Integer] | Array[String]]"
+                || result == "Array[Array[String] | Array[Integer]]",
+            "Expected nested array with union, got: {}",
+            result
+        );
+    }
+
+    // ============================================
+    // Hash Type Inference Tests
+    // ============================================
+
+    #[test]
+    fn test_hash_symbol_integer() {
+        let (genv, lenv) = analyze(r#"x = { a: 1, b: 2 }"#);
+        let x_vtx = lenv.get_var("x").unwrap();
+        assert_eq!(
+            genv.get_vertex(x_vtx).unwrap().show(),
+            "Hash[Symbol, Integer]"
+        );
+    }
+
+    #[test]
+    fn test_hash_string_string() {
+        let (genv, lenv) = analyze(r#"x = { "k" => "v" }"#);
+        let x_vtx = lenv.get_var("x").unwrap();
+        assert_eq!(
+            genv.get_vertex(x_vtx).unwrap().show(),
+            "Hash[String, String]"
+        );
+    }
+
+    #[test]
+    fn test_hash_mixed_values() {
+        let (genv, lenv) = analyze(r#"x = { a: 1, b: "x" }"#);
+        let x_vtx = lenv.get_var("x").unwrap();
+        let result = genv.get_vertex(x_vtx).unwrap().show();
+        assert!(
+            result == "Hash[Symbol, Integer | String]"
+                || result == "Hash[Symbol, String | Integer]",
+            "Expected Hash with union value type, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_hash_empty() {
+        let (genv, lenv) = analyze(r#"x = {}"#);
+        let x_vtx = lenv.get_var("x").unwrap();
+        assert_eq!(genv.get_vertex(x_vtx).unwrap().show(), "Hash");
+    }
+
+    #[test]
+    fn test_hash_nested() {
+        let (genv, lenv) = analyze(r#"x = { a: [1] }"#);
+        let x_vtx = lenv.get_var("x").unwrap();
+        assert_eq!(
+            genv.get_vertex(x_vtx).unwrap().show(),
+            "Hash[Symbol, Array[Integer]]"
+        );
     }
 }
