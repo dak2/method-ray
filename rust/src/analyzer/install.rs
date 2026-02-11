@@ -81,15 +81,17 @@ pub(crate) fn install_node(
     None
 }
 
-/// Process multiple statements
+/// Process multiple statements (returns last expression's VertexId)
 pub(crate) fn install_statements(
     genv: &mut GlobalEnv,
     lenv: &mut LocalEnv,
     changes: &mut ChangeSet,
     source: &str,
     statements: &ruby_prism::StatementsNode,
-) {
+) -> Option<VertexId> {
+    let mut last_vtx = None;
     for stmt in &statements.body() {
-        install_node(genv, lenv, changes, source, &stmt);
+        last_vtx = install_node(genv, lenv, changes, source, &stmt);
     }
+    last_vtx
 }

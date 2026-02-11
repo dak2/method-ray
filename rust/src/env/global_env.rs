@@ -162,6 +162,17 @@ impl GlobalEnv {
             .register_with_block(recv_ty, method_name, ret_ty, block_param_types);
     }
 
+    /// Register a user-defined method (return type resolved via graph)
+    pub fn register_user_method(
+        &mut self,
+        recv_ty: Type,
+        method_name: &str,
+        return_vertex: VertexId,
+    ) {
+        self.method_registry
+            .register_user_method(recv_ty, method_name, return_vertex);
+    }
+
     // ===== Type Errors =====
 
     /// Record a type error (undefined method)

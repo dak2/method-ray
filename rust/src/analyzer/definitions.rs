@@ -8,6 +8,7 @@
 
 use crate::env::{GlobalEnv, LocalEnv};
 use crate::graph::{ChangeSet, VertexId};
+use crate::types::Type;
 use ruby_prism::Node;
 
 use super::install::install_statements;
@@ -64,16 +65,29 @@ pub(crate) fn process_def_node(
     def_node: &ruby_prism::DefNode,
 ) -> Option<VertexId> {
     let method_name = String::from_utf8_lossy(def_node.name().as_slice()).to_string();
-    install_method(genv, method_name);
+    install_method(genv, method_name.clone());
 
     // Process parameters BEFORE processing body
     if let Some(params_node) = def_node.parameters() {
         install_parameters(genv, lenv, changes, source, &params_node);
     }
 
+    let mut last_vtx = None;
     if let Some(body) = def_node.body() {
         if let Some(statements) = body.as_statements_node() {
-            install_statements(genv, lenv, changes, source, &statements);
+            last_vtx = install_statements(genv, lenv, changes, source, &statements);
+        }
+    }
+
+    // Register user-defined method with return vertex (before exiting scope)
+    if let Some(return_vtx) = last_vtx {
+        let recv_type_name = genv
+            .scope_manager
+            .current_class_name()
+            .or_else(|| genv.scope_manager.current_module_name());
+
+        if let Some(name) = recv_type_name {
+            genv.register_user_method(Type::instance(&name), &method_name, return_vtx);
         }
     }
 
@@ -151,7 +165,9 @@ fn extract_constant_path(node: &Node) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::ChangeSet;
     use crate::parser::ParseSession;
+    use crate::types::Type;
 
     #[test]
     fn test_enter_exit_class_scope() {
@@ -287,5 +303,28 @@ mod tests {
 
         let name = extract_module_name(&module_node);
         assert_eq!(name, "Api::V1");
+    }
+
+    #[test]
+    fn test_process_def_node_registers_user_method() {
+        let source = "class User; def name; \"Alice\"; end; end";
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
+        let root = parse_result.node();
+        let program = root.as_program_node().unwrap();
+
+        let mut genv = GlobalEnv::new();
+        let mut lenv = LocalEnv::new();
+        let mut changes = ChangeSet::new();
+
+        let stmt = program.statements().body().first().unwrap();
+        let class_node = stmt.as_class_node().unwrap();
+        process_class_node(&mut genv, &mut lenv, &mut changes, source, &class_node);
+
+        // User#name should be registered as a user-defined method
+        let info = genv
+            .resolve_method(&Type::instance("User"), "name")
+            .expect("User#name should be registered");
+        assert!(info.return_vertex.is_some());
     }
 }

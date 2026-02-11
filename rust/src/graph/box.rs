@@ -86,11 +86,14 @@ impl BoxTrait for MethodCallBox {
         for recv_ty in recv_types {
             // Resolve method
             if let Some(method_info) = genv.resolve_method(&recv_ty, &self.method_name) {
-                // Create return type as Source
-                let ret_src_id = genv.new_source(method_info.return_type.clone());
-
-                // Add edge to return value
-                changes.add_edge(ret_src_id, self.ret);
+                if let Some(return_vtx) = method_info.return_vertex {
+                    // User-defined: edge from body's last expr → call site return
+                    changes.add_edge(return_vtx, self.ret);
+                } else {
+                    // RBS/builtin: create Source with fixed return type
+                    let ret_src_id = genv.new_source(method_info.return_type.clone());
+                    changes.add_edge(ret_src_id, self.ret);
+                }
             } else {
                 // Record type error for diagnostic reporting
                 genv.record_type_error(
@@ -487,5 +490,37 @@ mod tests {
         // Block parameters should be resolved from Hash[String, Integer]
         assert_eq!(genv.get_vertex(key_vtx).unwrap().show(), "String");
         assert_eq!(genv.get_vertex(value_vtx).unwrap().show(), "Integer");
+    }
+
+    #[test]
+    fn test_method_call_box_user_defined_method() {
+        let mut genv = GlobalEnv::new();
+
+        // Simulate: def name; "Alice"; end
+        let body_src = genv.new_source(Type::string());
+
+        // Register user-defined method User#name with return_vertex
+        genv.register_user_method(Type::instance("User"), "name", body_src);
+
+        // Simulate: user.name (receiver has type User)
+        let recv_vtx = genv.new_vertex();
+        let recv_src = genv.new_source(Type::instance("User"));
+        genv.add_edge(recv_src, recv_vtx);
+
+        let ret_vtx = genv.new_vertex();
+        let box_id = genv.alloc_box_id();
+        let call_box = MethodCallBox::new(
+            box_id,
+            recv_vtx,
+            "name".to_string(),
+            ret_vtx,
+            None,
+        );
+        genv.register_box(box_id, Box::new(call_box));
+
+        genv.run_all();
+
+        // Return type should be String (propagated from body's last expression)
+        assert_eq!(genv.get_vertex(ret_vtx).unwrap().show(), "String");
     }
 }
