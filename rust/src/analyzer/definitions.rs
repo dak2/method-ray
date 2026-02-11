@@ -6,38 +6,110 @@
 //! - Method definition scope management (def baz ... end)
 //! - Extracting class/module names from AST nodes (including qualified names like Api::User)
 
-use crate::env::GlobalEnv;
+use crate::env::{GlobalEnv, LocalEnv};
+use crate::graph::{ChangeSet, VertexId};
 use ruby_prism::Node;
 
+use super::install::install_statements;
+use super::parameters::install_parameters;
+
+/// Process class definition node
+pub(crate) fn process_class_node(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    class_node: &ruby_prism::ClassNode,
+) -> Option<VertexId> {
+    let class_name = extract_class_name(class_node);
+    install_class(genv, class_name);
+
+    if let Some(body) = class_node.body() {
+        if let Some(statements) = body.as_statements_node() {
+            install_statements(genv, lenv, changes, source, &statements);
+        }
+    }
+
+    exit_scope(genv);
+    None
+}
+
+/// Process module definition node
+pub(crate) fn process_module_node(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    module_node: &ruby_prism::ModuleNode,
+) -> Option<VertexId> {
+    let module_name = extract_module_name(module_node);
+    install_module(genv, module_name);
+
+    if let Some(body) = module_node.body() {
+        if let Some(statements) = body.as_statements_node() {
+            install_statements(genv, lenv, changes, source, &statements);
+        }
+    }
+
+    exit_scope(genv);
+    None
+}
+
+/// Process method definition node
+pub(crate) fn process_def_node(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    def_node: &ruby_prism::DefNode,
+) -> Option<VertexId> {
+    let method_name = String::from_utf8_lossy(def_node.name().as_slice()).to_string();
+    install_method(genv, method_name);
+
+    // Process parameters BEFORE processing body
+    if let Some(params_node) = def_node.parameters() {
+        install_parameters(genv, lenv, changes, source, &params_node);
+    }
+
+    if let Some(body) = def_node.body() {
+        if let Some(statements) = body.as_statements_node() {
+            install_statements(genv, lenv, changes, source, &statements);
+        }
+    }
+
+    exit_scope(genv);
+    None
+}
+
 /// Install class definition
-pub fn install_class(genv: &mut GlobalEnv, class_name: String) {
+fn install_class(genv: &mut GlobalEnv, class_name: String) {
     genv.enter_class(class_name);
 }
 
 /// Install module definition
-pub fn install_module(genv: &mut GlobalEnv, module_name: String) {
+fn install_module(genv: &mut GlobalEnv, module_name: String) {
     genv.enter_module(module_name);
 }
 
 /// Install method definition
-pub fn install_method(genv: &mut GlobalEnv, method_name: String) {
+fn install_method(genv: &mut GlobalEnv, method_name: String) {
     genv.enter_method(method_name);
 }
 
 /// Exit current scope (class, module, or method)
-pub fn exit_scope(genv: &mut GlobalEnv) {
+fn exit_scope(genv: &mut GlobalEnv) {
     genv.exit_scope();
 }
 
 /// Extract class name from ClassNode
 /// Supports both simple names (User) and qualified names (Api::V1::User)
-pub fn extract_class_name(class_node: &ruby_prism::ClassNode) -> String {
+fn extract_class_name(class_node: &ruby_prism::ClassNode) -> String {
     extract_constant_path(&class_node.constant_path()).unwrap_or_else(|| "UnknownClass".to_string())
 }
 
 /// Extract module name from ModuleNode
 /// Supports both simple names (Utils) and qualified names (Api::V1::Utils)
-pub fn extract_module_name(module_node: &ruby_prism::ModuleNode) -> String {
+fn extract_module_name(module_node: &ruby_prism::ModuleNode) -> String {
     extract_constant_path(&module_node.constant_path())
         .unwrap_or_else(|| "UnknownModule".to_string())
 }

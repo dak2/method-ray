@@ -6,35 +6,121 @@
 //! - Managing block scope
 
 use crate::env::{GlobalEnv, LocalEnv, ScopeKind};
-use crate::graph::VertexId;
+use crate::graph::{ChangeSet, VertexId};
 
-use super::parameters::install_required_parameter;
+use super::parameters::{install_optional_parameter, install_required_parameter, install_rest_parameter};
+
+/// Process block node
+pub(crate) fn process_block_node(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    block_node: &ruby_prism::BlockNode,
+) -> Option<VertexId> {
+    process_block_node_with_params(genv, lenv, changes, source, block_node);
+    None
+}
+
+/// Process block node and return block parameter vertex IDs
+pub(crate) fn process_block_node_with_params(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    block_node: &ruby_prism::BlockNode,
+) -> Vec<VertexId> {
+    enter_block_scope(genv);
+
+    let mut param_vtxs = Vec::new();
+
+    if let Some(params_node) = block_node.parameters() {
+        if let Some(block_params) = params_node.as_block_parameters_node() {
+            param_vtxs =
+                install_block_parameters_with_vtxs(genv, lenv, changes, source, &block_params);
+        }
+    }
+
+    if let Some(body) = block_node.body() {
+        if let Some(statements) = body.as_statements_node() {
+            super::install::install_statements(genv, lenv, changes, source, &statements);
+        } else {
+            super::install::install_node(genv, lenv, changes, source, &body);
+        }
+    }
+
+    exit_block_scope(genv);
+
+    param_vtxs
+}
+
+/// Install block parameters and return their vertex IDs
+fn install_block_parameters_with_vtxs(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    block_params: &ruby_prism::BlockParametersNode,
+) -> Vec<VertexId> {
+    let mut vtxs = Vec::new();
+
+    if let Some(params) = block_params.parameters() {
+        // Required parameters (most common in blocks)
+        for node in params.requireds().iter() {
+            if let Some(req_param) = node.as_required_parameter_node() {
+                let name = String::from_utf8_lossy(req_param.name().as_slice()).to_string();
+                let vtx = install_block_parameter(genv, lenv, name);
+                vtxs.push(vtx);
+            }
+        }
+
+        // Optional parameters: { |x = 1| ... }
+        for node in params.optionals().iter() {
+            if let Some(opt_param) = node.as_optional_parameter_node() {
+                let name = String::from_utf8_lossy(opt_param.name().as_slice()).to_string();
+                let default_value = opt_param.value();
+
+                if let Some(default_vtx) =
+                    super::install::install_node(genv, lenv, changes, source, &default_value)
+                {
+                    let vtx =
+                        install_optional_parameter(genv, lenv, changes, name, default_vtx);
+                    vtxs.push(vtx);
+                } else {
+                    let vtx = install_block_parameter(genv, lenv, name);
+                    vtxs.push(vtx);
+                }
+            }
+        }
+
+        // Rest parameter: { |*args| ... }
+        if let Some(rest_node) = params.rest() {
+            if let Some(rest_param) = rest_node.as_rest_parameter_node() {
+                if let Some(name_id) = rest_param.name() {
+                    let name = String::from_utf8_lossy(name_id.as_slice()).to_string();
+                    let vtx = install_rest_parameter(genv, lenv, name);
+                    vtxs.push(vtx);
+                }
+            }
+        }
+    }
+
+    vtxs
+}
 
 /// Enter a new block scope
-///
-/// Creates a new scope for the block and enters it.
-/// Block scopes inherit variables from parent scopes.
-pub fn enter_block_scope(genv: &mut GlobalEnv) {
+fn enter_block_scope(genv: &mut GlobalEnv) {
     let block_scope_id = genv.scope_manager.new_scope(ScopeKind::Block);
     genv.scope_manager.enter_scope(block_scope_id);
 }
 
 /// Exit the current block scope
-pub fn exit_block_scope(genv: &mut GlobalEnv) {
+fn exit_block_scope(genv: &mut GlobalEnv) {
     genv.scope_manager.exit_scope();
 }
 
-/// Install block parameters as local variables
-///
-/// Block parameters are registered as Bot (untyped) type since we don't
-/// know what type will be passed from the iterator method.
-///
-/// # Example
-/// ```ruby
-/// [1, 2, 3].each { |x| x.to_s }  # 'x' is a block parameter
-/// ```
-pub fn install_block_parameter(genv: &mut GlobalEnv, lenv: &mut LocalEnv, name: String) -> VertexId {
-    // Reuse required parameter logic (Bot type)
+/// Install block parameter as a local variable (Bot type)
+fn install_block_parameter(genv: &mut GlobalEnv, lenv: &mut LocalEnv, name: String) -> VertexId {
     install_required_parameter(genv, lenv, name)
 }
 
@@ -51,12 +137,10 @@ mod tests {
         enter_block_scope(&mut genv);
         let block_scope_id = genv.scope_manager.current_scope().id;
 
-        // Should be in a new scope
         assert_ne!(initial_scope_id, block_scope_id);
 
         exit_block_scope(&mut genv);
 
-        // Should be back to initial scope
         assert_eq!(genv.scope_manager.current_scope().id, initial_scope_id);
     }
 
@@ -69,7 +153,6 @@ mod tests {
 
         let vtx = install_block_parameter(&mut genv, &mut lenv, "x".to_string());
 
-        // Parameter should be registered in LocalEnv
         assert_eq!(lenv.get_var("x"), Some(vtx));
 
         exit_block_scope(&mut genv);
@@ -79,14 +162,12 @@ mod tests {
     fn test_block_inherits_parent_scope_vars() {
         let mut genv = GlobalEnv::new();
 
-        // Set variable in top-level scope
         genv.scope_manager
             .current_scope_mut()
             .set_local_var("outer".to_string(), VertexId(100));
 
         enter_block_scope(&mut genv);
 
-        // Block should be able to lookup parent scope variables
         assert_eq!(genv.scope_manager.lookup_var("outer"), Some(VertexId(100)));
 
         exit_block_scope(&mut genv);
