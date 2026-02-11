@@ -4,7 +4,7 @@
 //! and dispatches them to specialized handlers.
 
 use crate::env::{GlobalEnv, LocalEnv};
-use crate::graph::{ChangeSet, VertexId};
+use crate::graph::{BlockParameterTypeBox, ChangeSet, VertexId};
 use crate::source_map::SourceLocation;
 use ruby_prism::Node;
 
@@ -115,13 +115,67 @@ pub fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<NeedsCh
     None
 }
 
+/// Process a node that needs child processing
+///
+/// This function handles the second phase of two-phase dispatch:
+/// 1. `dispatch_needs_child` identifies the node kind and extracts data
+/// 2. `process_needs_child` processes child nodes and completes the operation
+pub(crate) fn process_needs_child(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    kind: NeedsChildKind,
+) -> Option<VertexId> {
+    match kind {
+        NeedsChildKind::IvarWrite { ivar_name, value } => {
+            let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
+            Some(finish_ivar_write(genv, ivar_name, value_vtx))
+        }
+        NeedsChildKind::LocalVarWrite { var_name, value } => {
+            let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
+            Some(finish_local_var_write(genv, lenv, changes, var_name, value_vtx))
+        }
+        NeedsChildKind::MethodCall {
+            receiver,
+            method_name,
+            location,
+            block,
+        } => {
+            let recv_vtx = super::install::install_node(genv, lenv, changes, source, &receiver)?;
+
+            // Handle block if present (e.g., `x.each { |i| ... }`)
+            if let Some(block_node) = block {
+                if let Some(block) = block_node.as_block_node() {
+                    let param_vtxs = super::blocks::process_block_node_with_params(
+                        genv, lenv, changes, source, &block,
+                    );
+
+                    if !param_vtxs.is_empty() {
+                        let box_id = genv.alloc_box_id();
+                        let block_box = BlockParameterTypeBox::new(
+                            box_id,
+                            recv_vtx,
+                            method_name.clone(),
+                            param_vtxs,
+                        );
+                        genv.register_box(box_id, Box::new(block_box));
+                    }
+                }
+            }
+
+            Some(finish_method_call(genv, recv_vtx, method_name, location))
+        }
+    }
+}
+
 /// Finish instance variable write after child is processed
-pub fn finish_ivar_write(genv: &mut GlobalEnv, ivar_name: String, value_vtx: VertexId) -> VertexId {
+fn finish_ivar_write(genv: &mut GlobalEnv, ivar_name: String, value_vtx: VertexId) -> VertexId {
     install_ivar_write(genv, ivar_name, value_vtx)
 }
 
 /// Finish local variable write after child is processed
-pub fn finish_local_var_write(
+fn finish_local_var_write(
     genv: &mut GlobalEnv,
     lenv: &mut LocalEnv,
     changes: &mut ChangeSet,
@@ -132,7 +186,7 @@ pub fn finish_local_var_write(
 }
 
 /// Finish method call after receiver is processed
-pub fn finish_method_call(
+fn finish_method_call(
     genv: &mut GlobalEnv,
     recv_vtx: VertexId,
     method_name: String,

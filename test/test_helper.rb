@@ -11,6 +11,25 @@ require "open3"
 module CLITestHelper
   private
 
+  def infer(source)
+    analyzer = MethodRay::Analyzer.new("test")
+    result = analyzer.infer_types(source)
+    types = {}
+    result.each_line do |line|
+      line = line.strip
+      next if line.empty?
+
+      name, type = line.split(': ', 2)
+      types[name] = type
+    end
+    types
+  end
+
+  def assert_type(source, var, expected)
+    types = infer(source)
+    assert_equal expected, types[var], "Expected #{var} to be #{expected}, got #{types[var]}"
+  end
+
   def run_check(source)
     file = Tempfile.new(['integration_test', '.rb'])
     file.write(source)
