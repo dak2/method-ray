@@ -1,5 +1,6 @@
 //! Method registration and resolution
 
+use crate::graph::VertexId;
 use crate::types::Type;
 use std::collections::HashMap;
 
@@ -8,6 +9,7 @@ use std::collections::HashMap;
 pub struct MethodInfo {
     pub return_type: Type,
     pub block_param_types: Option<Vec<Type>>,
+    pub return_vertex: Option<VertexId>,
 }
 
 /// Registry for method definitions
@@ -42,6 +44,24 @@ impl MethodRegistry {
             MethodInfo {
                 return_type: ret_ty,
                 block_param_types,
+                return_vertex: None,
+            },
+        );
+    }
+
+    /// Register a user-defined method (return type resolved via graph)
+    pub fn register_user_method(
+        &mut self,
+        recv_ty: Type,
+        method_name: &str,
+        return_vertex: VertexId,
+    ) {
+        self.methods.insert(
+            (recv_ty, method_name.to_string()),
+            MethodInfo {
+                return_type: Type::Bot,
+                block_param_types: None,
+                return_vertex: Some(return_vertex),
             },
         );
     }
@@ -86,5 +106,16 @@ mod tests {
     fn test_resolve_not_found() {
         let registry = MethodRegistry::new();
         assert!(registry.resolve(&Type::string(), "unknown").is_none());
+    }
+
+    #[test]
+    fn test_register_user_method_and_resolve() {
+        let mut registry = MethodRegistry::new();
+        let return_vtx = VertexId(42);
+        registry.register_user_method(Type::instance("User"), "name", return_vtx);
+
+        let info = registry.resolve(&Type::instance("User"), "name").unwrap();
+        assert_eq!(info.return_vertex, Some(VertexId(42)));
+        assert_eq!(info.return_type, Type::Bot);
     }
 }
