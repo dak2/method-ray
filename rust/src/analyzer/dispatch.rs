@@ -35,6 +35,8 @@ pub enum NeedsChildKind<'a> {
         location: SourceLocation,
         /// Optional block attached to the method call
         block: Option<Node<'a>>,
+        /// Arguments to the method call
+        arguments: Vec<Node<'a>>,
     },
 }
 
@@ -103,11 +105,18 @@ pub fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<NeedsCh
             // Get block if present (e.g., `x.each { |i| ... }`)
             let block = call_node.block();
 
+            // Get arguments if present (e.g., `x.foo(1, 2)`)
+            let arguments: Vec<Node<'a>> = call_node
+                .arguments()
+                .map(|args| args.arguments().iter().collect())
+                .unwrap_or_default();
+
             return Some(NeedsChildKind::MethodCall {
                 receiver,
                 method_name,
                 location,
                 block,
+                arguments,
             });
         }
     }
@@ -141,8 +150,17 @@ pub(crate) fn process_needs_child(
             method_name,
             location,
             block,
+            arguments,
         } => {
             let recv_vtx = super::install::install_node(genv, lenv, changes, source, &receiver)?;
+
+            // Process arguments if present
+            let arg_vtxs: Vec<VertexId> = arguments
+                .iter()
+                .filter_map(|arg| {
+                    super::install::install_node(genv, lenv, changes, source, arg)
+                })
+                .collect();
 
             // Handle block if present (e.g., `x.each { |i| ... }`)
             if let Some(block_node) = block {
@@ -164,7 +182,9 @@ pub(crate) fn process_needs_child(
                 }
             }
 
-            Some(finish_method_call(genv, recv_vtx, method_name, location))
+            Some(finish_method_call(
+                genv, recv_vtx, method_name, arg_vtxs, location,
+            ))
         }
     }
 }
@@ -190,7 +210,8 @@ fn finish_method_call(
     genv: &mut GlobalEnv,
     recv_vtx: VertexId,
     method_name: String,
+    arg_vtxs: Vec<VertexId>,
     location: SourceLocation,
 ) -> VertexId {
-    install_method_call(genv, recv_vtx, method_name, Some(location))
+    install_method_call(genv, recv_vtx, method_name, arg_vtxs, Some(location))
 }

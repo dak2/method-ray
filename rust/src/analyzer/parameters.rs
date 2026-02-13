@@ -114,18 +114,24 @@ pub fn install_keyword_rest_parameter(
 }
 
 /// Install method parameters as local variables
+///
+/// Returns a Vec of VertexId for required and optional parameters (positional),
+/// which can be used for argument-to-parameter type propagation.
 pub(crate) fn install_parameters(
     genv: &mut GlobalEnv,
     lenv: &mut LocalEnv,
     changes: &mut ChangeSet,
     source: &str,
     params_node: &ruby_prism::ParametersNode,
-) {
+) -> Vec<VertexId> {
+    let mut param_vtxs = Vec::new();
+
     // Required parameters: def foo(a, b)
     for node in params_node.requireds().iter() {
         if let Some(req_param) = node.as_required_parameter_node() {
             let name = String::from_utf8_lossy(req_param.name().as_slice()).to_string();
-            install_required_parameter(genv, lenv, name);
+            let vtx = install_required_parameter(genv, lenv, name);
+            param_vtxs.push(vtx);
         }
     }
 
@@ -135,17 +141,19 @@ pub(crate) fn install_parameters(
             let name = String::from_utf8_lossy(opt_param.name().as_slice()).to_string();
             let default_value = opt_param.value();
 
-            if let Some(default_vtx) =
+            let vtx = if let Some(default_vtx) =
                 super::install::install_node(genv, lenv, changes, source, &default_value)
             {
-                install_optional_parameter(genv, lenv, changes, name, default_vtx);
+                install_optional_parameter(genv, lenv, changes, name, default_vtx)
             } else {
-                install_required_parameter(genv, lenv, name);
-            }
+                install_required_parameter(genv, lenv, name)
+            };
+            param_vtxs.push(vtx);
         }
     }
 
     // Rest parameter: def foo(*args)
+    // Not included in param_vtxs (variadic args need special handling)
     if let Some(rest_node) = params_node.rest() {
         if let Some(rest_param) = rest_node.as_rest_parameter_node() {
             if let Some(name_id) = rest_param.name() {
@@ -156,6 +164,7 @@ pub(crate) fn install_parameters(
     }
 
     // Keyword rest parameter: def foo(**kwargs)
+    // Not included in param_vtxs (keyword args need special handling)
     if let Some(kwrest_node) = params_node.keyword_rest() {
         if let Some(kwrest_param) = kwrest_node.as_keyword_rest_parameter_node() {
             if let Some(name_id) = kwrest_param.name() {
@@ -164,6 +173,8 @@ pub(crate) fn install_parameters(
             }
         }
     }
+
+    param_vtxs
 }
 
 #[cfg(test)]

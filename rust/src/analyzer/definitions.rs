@@ -68,9 +68,11 @@ pub(crate) fn process_def_node(
     install_method(genv, method_name.clone());
 
     // Process parameters BEFORE processing body
-    if let Some(params_node) = def_node.parameters() {
-        install_parameters(genv, lenv, changes, source, &params_node);
-    }
+    let param_vtxs = if let Some(params_node) = def_node.parameters() {
+        install_parameters(genv, lenv, changes, source, &params_node)
+    } else {
+        vec![]
+    };
 
     let mut last_vtx = None;
     if let Some(body) = def_node.body() {
@@ -79,7 +81,7 @@ pub(crate) fn process_def_node(
         }
     }
 
-    // Register user-defined method with return vertex (before exiting scope)
+    // Register user-defined method with return vertex and param vertices (before exiting scope)
     if let Some(return_vtx) = last_vtx {
         let recv_type_name = genv
             .scope_manager
@@ -87,7 +89,12 @@ pub(crate) fn process_def_node(
             .or_else(|| genv.scope_manager.current_module_name());
 
         if let Some(name) = recv_type_name {
-            genv.register_user_method(Type::instance(&name), &method_name, return_vtx);
+            genv.register_user_method(
+                Type::instance(&name),
+                &method_name,
+                return_vtx,
+                param_vtxs,
+            );
         }
     }
 

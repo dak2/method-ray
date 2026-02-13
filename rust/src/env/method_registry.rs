@@ -10,6 +10,7 @@ pub struct MethodInfo {
     pub return_type: Type,
     pub block_param_types: Option<Vec<Type>>,
     pub return_vertex: Option<VertexId>,
+    pub param_vertices: Option<Vec<VertexId>>,
 }
 
 /// Registry for method definitions
@@ -45,6 +46,7 @@ impl MethodRegistry {
                 return_type: ret_ty,
                 block_param_types,
                 return_vertex: None,
+                param_vertices: None,
             },
         );
     }
@@ -55,6 +57,7 @@ impl MethodRegistry {
         recv_ty: Type,
         method_name: &str,
         return_vertex: VertexId,
+        param_vertices: Vec<VertexId>,
     ) {
         self.methods.insert(
             (recv_ty, method_name.to_string()),
@@ -62,6 +65,7 @@ impl MethodRegistry {
                 return_type: Type::Bot,
                 block_param_types: None,
                 return_vertex: Some(return_vertex),
+                param_vertices: Some(param_vertices),
             },
         );
     }
@@ -112,10 +116,30 @@ mod tests {
     fn test_register_user_method_and_resolve() {
         let mut registry = MethodRegistry::new();
         let return_vtx = VertexId(42);
-        registry.register_user_method(Type::instance("User"), "name", return_vtx);
+        registry.register_user_method(Type::instance("User"), "name", return_vtx, vec![]);
 
         let info = registry.resolve(&Type::instance("User"), "name").unwrap();
         assert_eq!(info.return_vertex, Some(VertexId(42)));
         assert_eq!(info.return_type, Type::Bot);
+    }
+
+    #[test]
+    fn test_register_user_method_with_param_vertices() {
+        let mut registry = MethodRegistry::new();
+        let return_vtx = VertexId(10);
+        let param_vtxs = vec![VertexId(20), VertexId(21)];
+        registry.register_user_method(
+            Type::instance("Calc"),
+            "add",
+            return_vtx,
+            param_vtxs,
+        );
+
+        let info = registry.resolve(&Type::instance("Calc"), "add").unwrap();
+        assert_eq!(info.return_vertex, Some(VertexId(10)));
+        let pvs = info.param_vertices.as_ref().unwrap();
+        assert_eq!(pvs.len(), 2);
+        assert_eq!(pvs[0], VertexId(20));
+        assert_eq!(pvs[1], VertexId(21));
     }
 }
