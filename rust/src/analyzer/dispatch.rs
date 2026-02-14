@@ -15,6 +15,14 @@ use super::variables::{
     install_self,
 };
 
+/// Kind of attr_* declaration
+#[derive(Debug, Clone, Copy)]
+pub enum AttrKind {
+    Reader,
+    Writer,
+    Accessor,
+}
+
 /// Result of dispatching a simple node (no child processing needed)
 pub enum DispatchResult {
     /// Node produced a vertex
@@ -45,6 +53,11 @@ pub enum NeedsChildKind<'a> {
         location: SourceLocation,
         block: Option<Node<'a>>,
         arguments: Vec<Node<'a>>,
+    },
+    /// attr_reader / attr_writer / attr_accessor declaration
+    AttrDeclaration {
+        kind: AttrKind,
+        attr_names: Vec<String>,
     },
 }
 
@@ -77,6 +90,23 @@ pub fn dispatch_simple(genv: &mut GlobalEnv, lenv: &mut LocalEnv, node: &Node) -
     }
 
     DispatchResult::NotHandled
+}
+
+/// Extract symbol names from attr_* arguments (e.g., `attr_reader :name, :email`)
+fn extract_symbol_names(call_node: &ruby_prism::CallNode) -> Vec<String> {
+    call_node
+        .arguments()
+        .map(|args| {
+            args.arguments()
+                .iter()
+                .filter_map(|arg| {
+                    arg.as_symbol_node().map(|sym| {
+                        String::from_utf8_lossy(&sym.unescaped()).to_string()
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Check if node needs child processing
@@ -126,9 +156,16 @@ pub fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<NeedsCh
         } else {
             // No receiver: implicit self method call (e.g., `name`, `puts "hello"`)
 
-            // TODO: attr_* methods will be handled in next phase (skip for now)
-            const ATTR_METHODS: &[&str] = &["attr_reader", "attr_writer", "attr_accessor"];
-            if ATTR_METHODS.contains(&method_name.as_str()) {
+            if let Some(kind) = match method_name.as_str() {
+                "attr_reader" => Some(AttrKind::Reader),
+                "attr_writer" => Some(AttrKind::Writer),
+                "attr_accessor" => Some(AttrKind::Accessor),
+                _ => None,
+            } {
+                let attr_names = extract_symbol_names(&call_node);
+                if !attr_names.is_empty() {
+                    return Some(NeedsChildKind::AttrDeclaration { kind, attr_names });
+                }
                 return None;
             }
 
@@ -202,6 +239,10 @@ pub(crate) fn process_needs_child(
             process_method_call_common(
                 genv, lenv, changes, source, recv_vtx, method_name, location, block, arguments,
             )
+        }
+        NeedsChildKind::AttrDeclaration { kind, attr_names } => {
+            super::attributes::process_attr_declaration(genv, kind, attr_names);
+            None
         }
     }
 }
@@ -466,10 +507,30 @@ helper
         let _ = genv;
     }
 
-    // Test 7: attr_* methods are skipped by dispatch_needs_child
+    // Test 7: attr_reader basic — getter type resolution
     #[test]
-    fn test_attr_reader_skipped() {
+    fn test_attr_reader_basic() {
         let source = r#"
+class User
+  attr_reader :name
+
+  def initialize
+    @name = "Alice"
+  end
+end
+"#;
+        let genv = analyze(source);
+
+        // User#name should be registered and resolve to String via @name
+        let info = genv
+            .resolve_method(&Type::instance("User"), "name")
+            .expect("User#name should be registered");
+        assert!(info.return_vertex.is_some());
+        let ret_vtx = info.return_vertex.unwrap();
+        assert_eq!(get_type_show(&genv, ret_vtx), "String");
+
+        // Other methods still work
+        let greet_src = r#"
 class User
   attr_reader :name
 
@@ -478,19 +539,182 @@ class User
   end
 end
 "#;
+        let genv2 = analyze(greet_src);
+        let info2 = genv2
+            .resolve_method(&Type::instance("User"), "greet")
+            .expect("User#greet should be registered");
+        assert_eq!(get_type_show(&genv2, info2.return_vertex.unwrap()), "String");
+    }
+
+    // Test 8: attr_reader + self.name method call
+    #[test]
+    fn test_attr_reader_with_self_call() {
+        let source = r#"
+class User
+  attr_reader :name
+
+  def initialize
+    @name = "Alice"
+  end
+
+  def greet
+    self.name
+  end
+end
+"#;
         let genv = analyze(source);
 
-        // attr_reader should be skipped without panic, and other methods should work
+        // User#greet should resolve to String via User#name → @name
         let info = genv
             .resolve_method(&Type::instance("User"), "greet")
             .expect("User#greet should be registered");
         assert!(info.return_vertex.is_some());
-
         let ret_vtx = info.return_vertex.unwrap();
         assert_eq!(get_type_show(&genv, ret_vtx), "String");
     }
 
-    // Test 8: super call independence (SuperNode is not CallNode)
+    // Test 9: attr_reader + receiverless name call (proposal D integration)
+    #[test]
+    fn test_attr_reader_receiverless_call() {
+        let source = r#"
+class User
+  attr_reader :name
+
+  def initialize
+    @name = "Alice"
+  end
+
+  def greet
+    name
+  end
+end
+"#;
+        let genv = analyze(source);
+
+        // User#greet should resolve to String via implicit self → User#name → @name
+        let info = genv
+            .resolve_method(&Type::instance("User"), "greet")
+            .expect("User#greet should be registered");
+        assert!(info.return_vertex.is_some());
+        let ret_vtx = info.return_vertex.unwrap();
+        assert_eq!(get_type_show(&genv, ret_vtx), "String");
+    }
+
+    // Test 10: attr_accessor — both getter and setter
+    #[test]
+    fn test_attr_accessor() {
+        let source = r#"
+class User
+  attr_accessor :age
+
+  def initialize
+    @age = 30
+  end
+end
+"#;
+        let genv = analyze(source);
+
+        // User#age (getter) should be registered and resolve to Integer
+        let getter = genv
+            .resolve_method(&Type::instance("User"), "age")
+            .expect("User#age getter should be registered");
+        assert!(getter.return_vertex.is_some());
+        assert_eq!(get_type_show(&genv, getter.return_vertex.unwrap()), "Integer");
+
+        // User#age= (setter) should also be registered
+        let setter = genv
+            .resolve_method(&Type::instance("User"), "age=")
+            .expect("User#age= setter should be registered");
+        assert!(setter.return_vertex.is_some());
+    }
+
+    // Test 11: multiple attributes in single declaration
+    #[test]
+    fn test_attr_reader_multiple() {
+        let source = r#"
+class User
+  attr_reader :name, :email
+
+  def initialize
+    @name = "Alice"
+    @email = "alice@test.com"
+  end
+end
+"#;
+        let genv = analyze(source);
+
+        let name_info = genv
+            .resolve_method(&Type::instance("User"), "name")
+            .expect("User#name should be registered");
+        assert_eq!(get_type_show(&genv, name_info.return_vertex.unwrap()), "String");
+
+        let email_info = genv
+            .resolve_method(&Type::instance("User"), "email")
+            .expect("User#email should be registered");
+        assert_eq!(get_type_show(&genv, email_info.return_vertex.unwrap()), "String");
+    }
+
+    // Test 12: attr_reader in nested class
+    #[test]
+    fn test_attr_reader_nested_class() {
+        let source = r#"
+module Api
+  class User
+    attr_reader :name
+
+    def initialize
+      @name = "Alice"
+    end
+  end
+end
+"#;
+        let genv = analyze(source);
+
+        // Registered with simple class name "User"
+        let info = genv
+            .resolve_method(&Type::instance("User"), "name")
+            .expect("User#name should be registered");
+        assert!(info.return_vertex.is_some());
+        assert_eq!(get_type_show(&genv, info.return_vertex.unwrap()), "String");
+    }
+
+    // Test 13: attr_writer only — setter registered, getter not
+    #[test]
+    fn test_attr_writer_only() {
+        let source = r#"
+class User
+  attr_writer :name
+end
+"#;
+        let genv = analyze(source);
+
+        // User#name= should be registered
+        let setter = genv.resolve_method(&Type::instance("User"), "name=");
+        assert!(setter.is_some(), "User#name= should be registered");
+
+        // User#name (getter) should NOT be registered
+        let getter = genv.resolve_method(&Type::instance("User"), "name");
+        assert!(getter.is_none(), "User#name getter should NOT be registered for attr_writer");
+    }
+
+    // Test 14: attr_reader with no assignment (empty vertex)
+    #[test]
+    fn test_attr_reader_unassigned() {
+        let source = r#"
+class User
+  attr_reader :unknown
+end
+"#;
+        let genv = analyze(source);
+
+        // User#unknown should be registered (with empty vertex)
+        let info = genv
+            .resolve_method(&Type::instance("User"), "unknown")
+            .expect("User#unknown should be registered");
+        assert!(info.return_vertex.is_some());
+    }
+
+    // Test 15: super call independence (SuperNode is not CallNode)
     #[test]
     fn test_super_call_independence() {
         let source = r#"
