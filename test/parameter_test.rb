@@ -108,6 +108,75 @@ class ParameterTest < Minitest::Test
   end
 
   # ============================================
+  # Parameter Type Propagation from Call Site
+  # ============================================
+
+  def test_param_type_propagation_string
+    source = <<~RUBY
+      class Greeter
+        def greet(name)
+          name.upcase
+        end
+
+        def run
+          self.greet("Alice")
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_param_type_propagation_integer
+    source = <<~RUBY
+      class Calculator
+        def double(n)
+          n.even?
+        end
+
+        def run
+          self.double(42)
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_param_type_propagation_multiple_params
+    source = <<~RUBY
+      class Formatter
+        def format(greeting, name)
+          greeting.upcase
+          name.downcase
+        end
+
+        def run
+          self.format("Hello", "World")
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_param_type_propagation_chain
+    source = <<~RUBY
+      class Validator
+        def valid?(str)
+          str.length
+        end
+
+        def check
+          self.valid?("test")
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  # ============================================
   # Error Detection
   # ============================================
 
@@ -115,6 +184,22 @@ class ParameterTest < Minitest::Test
     source = <<~RUBY
       def greet(count = 42)
         count.upcase
+      end
+    RUBY
+
+    assert_check_error(source, method_name: 'upcase', receiver_type: 'Integer')
+  end
+
+  def test_param_type_propagation_error
+    source = <<~RUBY
+      class Processor
+        def process(value)
+          value.upcase
+        end
+
+        def run
+          self.process(42)
+        end
       end
     RUBY
 

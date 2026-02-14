@@ -23,6 +23,7 @@ pub struct MethodCallBox {
     recv: VertexId,
     method_name: String,
     ret: VertexId,
+    arg_vtxs: Vec<VertexId>,
     location: Option<SourceLocation>, // Source code location
     /// Number of times this box has been rescheduled
     reschedule_count: u8,
@@ -37,6 +38,7 @@ impl MethodCallBox {
         recv: VertexId,
         method_name: String,
         ret: VertexId,
+        arg_vtxs: Vec<VertexId>,
         location: Option<SourceLocation>,
     ) -> Self {
         Self {
@@ -44,6 +46,7 @@ impl MethodCallBox {
             recv,
             method_name,
             ret,
+            arg_vtxs,
             location,
             reschedule_count: 0,
         }
@@ -89,6 +92,15 @@ impl BoxTrait for MethodCallBox {
                 if let Some(return_vtx) = method_info.return_vertex {
                     // User-defined: edge from body's last expr → call site return
                     changes.add_edge(return_vtx, self.ret);
+
+                    // Propagate argument types to parameter vertices
+                    if let Some(param_vtxs) = &method_info.param_vertices {
+                        for (i, param_vtx) in param_vtxs.iter().enumerate() {
+                            if let Some(arg_vtx) = self.arg_vtxs.get(i) {
+                                changes.add_edge(*arg_vtx, *param_vtx);
+                            }
+                        }
+                    }
                 } else {
                     // RBS/builtin: create Source with fixed return type
                     let ret_src_id = genv.new_source(method_info.return_type.clone());
@@ -274,6 +286,7 @@ mod tests {
             x_vtx,
             "upcase".to_string(),
             ret_vtx,
+            vec![],
             None, // No location in test
         );
 
@@ -305,6 +318,7 @@ mod tests {
             x_vtx,
             "unknown_method".to_string(),
             ret_vtx,
+            vec![],
             None, // No location in test
         );
 
@@ -500,7 +514,7 @@ mod tests {
         let body_src = genv.new_source(Type::string());
 
         // Register user-defined method User#name with return_vertex
-        genv.register_user_method(Type::instance("User"), "name", body_src);
+        genv.register_user_method(Type::instance("User"), "name", body_src, vec![]);
 
         // Simulate: user.name (receiver has type User)
         let recv_vtx = genv.new_vertex();
@@ -514,6 +528,7 @@ mod tests {
             recv_vtx,
             "name".to_string(),
             ret_vtx,
+            vec![],
             None,
         );
         genv.register_box(box_id, Box::new(call_box));
@@ -522,5 +537,66 @@ mod tests {
 
         // Return type should be String (propagated from body's last expression)
         assert_eq!(genv.get_vertex(ret_vtx).unwrap().show(), "String");
+    }
+
+    #[test]
+    fn test_method_call_box_param_type_propagation() {
+        let mut genv = GlobalEnv::new();
+
+        // Simulate: def format(value); value.to_s; end
+        // 1. Create parameter vertex for 'value'
+        let param_vtx = genv.new_vertex();
+
+        // 2. Register Integer#to_s -> String (builtin)
+        genv.register_builtin_method(Type::integer(), "to_s", Type::string());
+
+        // 3. Create MethodCallBox for value.to_s (inside method body)
+        let inner_ret_vtx = genv.new_vertex();
+        let inner_box_id = genv.alloc_box_id();
+        let inner_call = MethodCallBox::new(
+            inner_box_id,
+            param_vtx,
+            "to_s".to_string(),
+            inner_ret_vtx,
+            vec![],
+            None,
+        );
+        genv.register_box(inner_box_id, Box::new(inner_call));
+
+        // 4. Register user-defined method Formatter#format with return_vertex and param_vertices
+        genv.register_user_method(
+            Type::instance("Formatter"),
+            "format",
+            inner_ret_vtx,
+            vec![param_vtx],
+        );
+
+        // 5. Simulate call: Formatter.new.format(42)
+        let recv_vtx = genv.new_vertex();
+        let recv_src = genv.new_source(Type::instance("Formatter"));
+        genv.add_edge(recv_src, recv_vtx);
+
+        let arg_vtx = genv.new_source(Type::integer()); // argument: 42
+
+        let call_ret_vtx = genv.new_vertex();
+        let call_box_id = genv.alloc_box_id();
+        let call_box = MethodCallBox::new(
+            call_box_id,
+            recv_vtx,
+            "format".to_string(),
+            call_ret_vtx,
+            vec![arg_vtx],
+            None,
+        );
+        genv.register_box(call_box_id, Box::new(call_box));
+
+        // Run all boxes
+        genv.run_all();
+
+        // param_vtx should have Integer type (propagated from argument)
+        assert_eq!(genv.get_vertex(param_vtx).unwrap().show(), "Integer");
+
+        // Return type should be String (Integer#to_s -> String)
+        assert_eq!(genv.get_vertex(call_ret_vtx).unwrap().show(), "String");
     }
 }

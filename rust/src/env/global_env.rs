@@ -168,9 +168,10 @@ impl GlobalEnv {
         recv_ty: Type,
         method_name: &str,
         return_vertex: VertexId,
+        param_vertices: Vec<VertexId>,
     ) {
         self.method_registry
-            .register_user_method(recv_ty, method_name, return_vertex);
+            .register_user_method(recv_ty, method_name, return_vertex, param_vertices);
     }
 
     // ===== Type Errors =====
