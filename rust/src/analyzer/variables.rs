@@ -29,14 +29,23 @@ pub fn install_local_var_read(lenv: &LocalEnv, var_name: &str) -> Option<VertexI
 }
 
 /// Install instance variable write: @name = value
+///
+/// If @name already has a pre-allocated VertexId (e.g., from attr_reader),
+/// an edge is added from value_vtx to the existing vertex so types propagate.
+/// Otherwise, value_vtx is registered directly as the ivar's VertexId.
 pub fn install_ivar_write(
     genv: &mut GlobalEnv,
     ivar_name: String,
     value_vtx: VertexId,
 ) -> VertexId {
-    genv.scope_manager
-        .set_instance_var_in_class(ivar_name, value_vtx);
-    value_vtx
+    if let Some(existing_vtx) = genv.scope_manager.lookup_instance_var(&ivar_name) {
+        genv.add_edge(value_vtx, existing_vtx);
+        existing_vtx
+    } else {
+        genv.scope_manager
+            .set_instance_var_in_class(ivar_name, value_vtx);
+        value_vtx
+    }
 }
 
 /// Install instance variable read: @name
