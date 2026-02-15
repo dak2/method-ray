@@ -142,7 +142,7 @@ fn extract_module_name(module_node: &ruby_prism::ModuleNode) -> String {
 /// - `Api::User` (ConstantPathNode) → "Api::User"
 /// - `Api::V1::User` (nested ConstantPathNode) → "Api::V1::User"
 /// - `::Api::User` (absolute path with COLON3) → "Api::User"
-fn extract_constant_path(node: &Node) -> Option<String> {
+pub(crate) fn extract_constant_path(node: &Node) -> Option<String> {
     // Simple constant read: `User`
     if let Some(constant_read) = node.as_constant_read_node() {
         return Some(String::from_utf8_lossy(constant_read.name().as_slice()).to_string());

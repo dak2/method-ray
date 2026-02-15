@@ -89,6 +89,21 @@ pub fn dispatch_simple(genv: &mut GlobalEnv, lenv: &mut LocalEnv, node: &Node) -
         };
     }
 
+    // ConstantReadNode: User → Type::Singleton("User")
+    if let Some(const_read) = node.as_constant_read_node() {
+        let name = String::from_utf8_lossy(const_read.name().as_slice()).to_string();
+        let vtx = genv.new_source(Type::singleton(&name));
+        return DispatchResult::Vertex(vtx);
+    }
+
+    // ConstantPathNode: Api::User → Type::Singleton("Api::User")
+    if node.as_constant_path_node().is_some() {
+        if let Some(name) = super::definitions::extract_constant_path(node) {
+            let vtx = genv.new_source(Type::singleton(&name));
+            return DispatchResult::Vertex(vtx);
+        }
+    }
+
     DispatchResult::NotHandled
 }
 
@@ -741,5 +756,122 @@ end
 
         let ret_vtx = info.return_vertex.unwrap();
         assert_eq!(get_type_show(&genv, ret_vtx), "String");
+    }
+
+    // Test 16: User.new → instance(User)
+    #[test]
+    fn test_constant_read_user_new() {
+        let source = r#"
+class User
+  def name
+    "Alice"
+  end
+end
+
+x = User.new
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "User.new should not produce type errors: {:?}",
+            genv.type_errors
+        );
+    }
+
+    // Test 17: User.new.name → String
+    #[test]
+    fn test_constant_read_user_new_method_chain() {
+        let source = r#"
+class User
+  def name
+    "Alice"
+  end
+end
+
+x = User.new.name
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "User.new.name should not produce type errors: {:?}",
+            genv.type_errors
+        );
+    }
+
+    // Test 18: Api::User.new → instance(Api::User) (ConstantPathNode)
+    #[test]
+    fn test_constant_path_qualified_new() {
+        let source = r#"
+class Api::User
+  def name
+    "Alice"
+  end
+end
+
+x = Api::User.new
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "Api::User.new should not produce type errors: {:?}",
+            genv.type_errors
+        );
+    }
+
+    // Test 19: User.new("Alice") → initialize parameter propagation
+    #[test]
+    fn test_constant_read_new_with_initialize_params() {
+        let source = r#"
+class User
+  def initialize(name)
+    @name = name
+  end
+end
+
+x = User.new("Alice")
+"#;
+        let genv = analyze(source);
+        assert!(genv.type_errors.is_empty());
+    }
+
+    // Test 20: user = User.new; user.name → String
+    #[test]
+    fn test_constant_read_assign_and_call() {
+        let source = r#"
+class User
+  def name
+    "Alice"
+  end
+end
+
+user = User.new
+user.name
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "user = User.new; user.name should not produce type errors: {:?}",
+            genv.type_errors
+        );
+    }
+
+    // Test 21: User.some_method should not produce type error (Singleton error suppression)
+    #[test]
+    fn test_constant_read_no_false_positive() {
+        let source = r#"
+class User
+  def name
+    "Alice"
+  end
+end
+
+User.some_method
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "User.some_method should not produce type errors (Singleton suppression): {:?}",
+            genv.type_errors
+        );
     }
 }

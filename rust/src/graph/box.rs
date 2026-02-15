@@ -106,6 +106,35 @@ impl BoxTrait for MethodCallBox {
                     let ret_src_id = genv.new_source(method_info.return_type.clone());
                     changes.add_edge(ret_src_id, self.ret);
                 }
+            } else if self.method_name == "new" {
+                if let Type::Singleton { name } = &recv_ty {
+                    // singleton(User)#new → instance(User)
+                    let instance_type = Type::instance(name.full_name());
+                    let ret_src = genv.new_source(instance_type.clone());
+                    changes.add_edge(ret_src, self.ret);
+
+                    // Propagate arguments to initialize parameters
+                    if let Some(init_info) = genv.resolve_method(&instance_type, "initialize") {
+                        if let Some(param_vtxs) = &init_info.param_vertices {
+                            for (i, param_vtx) in param_vtxs.iter().enumerate() {
+                                if let Some(arg_vtx) = self.arg_vtxs.get(i) {
+                                    changes.add_edge(*arg_vtx, *param_vtx);
+                                }
+                            }
+                        }
+                    }
+                    continue;
+                }
+                // Non-singleton .new: record error
+                genv.record_type_error(
+                    recv_ty.clone(),
+                    self.method_name.clone(),
+                    self.location.clone(),
+                );
+            } else if matches!(&recv_ty, Type::Singleton { .. }) {
+                // Skip error for unknown class methods on Singleton types
+                // (class method RBS registration is not yet supported)
+                continue;
             } else {
                 // Record type error for diagnostic reporting
                 genv.record_type_error(
