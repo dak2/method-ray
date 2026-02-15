@@ -9,6 +9,7 @@ use crate::graph::{ChangeSet, VertexId};
 use ruby_prism::Node;
 
 use super::blocks::process_block_node;
+use super::conditionals::{process_case_node, process_if_node, process_unless_node};
 use super::definitions::{process_class_node, process_def_node, process_module_node};
 use super::dispatch::{dispatch_needs_child, dispatch_simple, process_needs_child, DispatchResult};
 use super::literals::install_literal_node;
@@ -63,6 +64,16 @@ pub(crate) fn install_node(
 
     if let Some(block_node) = node.as_block_node() {
         return process_block_node(genv, lenv, changes, source, &block_node);
+    }
+
+    if let Some(if_node) = node.as_if_node() {
+        return process_if_node(genv, lenv, changes, source, &if_node);
+    }
+    if let Some(unless_node) = node.as_unless_node() {
+        return process_unless_node(genv, lenv, changes, source, &unless_node);
+    }
+    if let Some(case_node) = node.as_case_node() {
+        return process_case_node(genv, lenv, changes, source, &case_node);
     }
 
     match dispatch_simple(genv, lenv, node) {
