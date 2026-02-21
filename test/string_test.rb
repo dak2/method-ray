@@ -33,6 +33,10 @@ class StringTest < Minitest::Test
     assert_equal "String", types["y"]
   end
 
+  def test_interpolated_string_literal
+    assert_type 'x = "hello #{1 + 2}"', "x", "String"
+  end
+
   # ============================================
   # No Error
   # ============================================
@@ -43,6 +47,14 @@ class StringTest < Minitest::Test
       y = x.upcase.downcase
     RUBY
 
+    assert_no_check_errors(source)
+  end
+
+  def test_interpolated_string_method_chain_no_error
+    source = <<~RUBY
+      x = "hello \#{name}"
+      y = x.upcase.downcase
+    RUBY
     assert_no_check_errors(source)
   end
 
@@ -62,4 +74,17 @@ class StringTest < Minitest::Test
 
     assert_check_error(source, method_name: 'ceil', receiver_type: 'String')
   end
+
+  def test_interpolated_string_type_error
+    source = <<~RUBY
+      class Formatter
+        def format
+          x = "hello \#{1}"
+          y = x.ceil
+        end
+      end
+    RUBY
+    assert_check_error(source, method_name: 'ceil', receiver_type: 'String')
+  end
+
 end

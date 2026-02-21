@@ -47,4 +47,16 @@ class RegexpTest < Minitest::Test
 
     assert_check_error(source, method_name: 'upcase', receiver_type: 'Regexp')
   end
+
+  def test_interpolated_regexp_type_error
+    source = <<~RUBY
+      class Formatter
+        def format
+          x = /hello \#{1}/
+          y = x.ceil
+        end
+      end
+    RUBY
+    assert_check_error(source, method_name: 'ceil', receiver_type: 'Regexp')
+  end
 end

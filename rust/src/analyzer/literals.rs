@@ -34,6 +34,30 @@ pub(crate) fn install_literal_node(
         return install_range_literal(genv, lenv, changes, source, &range_node);
     }
 
+    // InterpolatedStringNode: "Hello, #{expr}" → String
+    if let Some(interp) = node.as_interpolated_string_node() {
+        for part in &interp.parts() {
+            super::install::install_node(genv, lenv, changes, source, &part);
+        }
+        return Some(genv.new_source(Type::string()));
+    }
+
+    // InterpolatedSymbolNode: :"hello_#{expr}" → Symbol
+    if let Some(interp) = node.as_interpolated_symbol_node() {
+        for part in &interp.parts() {
+            super::install::install_node(genv, lenv, changes, source, &part);
+        }
+        return Some(genv.new_source(Type::symbol()));
+    }
+
+    // InterpolatedRegularExpressionNode: /hello #{expr}/ → Regexp
+    if let Some(interp) = node.as_interpolated_regular_expression_node() {
+        for part in &interp.parts() {
+            super::install::install_node(genv, lenv, changes, source, &part);
+        }
+        return Some(genv.new_source(Type::regexp()));
+    }
+
     install_simple_literal(genv, node)
 }
 
@@ -242,6 +266,27 @@ mod tests {
 
     #[test]
     fn test_install_regexp_literal() {
+        let mut genv = GlobalEnv::new();
+        let vtx = genv.new_source(Type::regexp());
+        assert_eq!(genv.get_source(vtx).unwrap().ty.show(), "Regexp");
+    }
+
+    #[test]
+    fn test_install_interpolated_string_literal() {
+        let mut genv = GlobalEnv::new();
+        let vtx = genv.new_source(Type::string());
+        assert_eq!(genv.get_source(vtx).unwrap().ty.show(), "String");
+    }
+
+    #[test]
+    fn test_install_interpolated_symbol_literal() {
+        let mut genv = GlobalEnv::new();
+        let vtx = genv.new_source(Type::symbol());
+        assert_eq!(genv.get_source(vtx).unwrap().ty.show(), "Symbol");
+    }
+
+    #[test]
+    fn test_install_interpolated_regexp_literal() {
         let mut genv = GlobalEnv::new();
         let vtx = genv.new_source(Type::regexp());
         assert_eq!(genv.get_source(vtx).unwrap().ty.show(), "Regexp");
