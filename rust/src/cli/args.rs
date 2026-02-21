@@ -35,6 +35,6 @@ pub enum Commands {
     /// Show version information
     Version,
 
-    /// Clear RBS cache
+    /// [DEPRECATED] Clear RBS cache
     ClearCache,
 }
