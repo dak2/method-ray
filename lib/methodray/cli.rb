@@ -17,6 +17,7 @@ module MethodRay
       when 'watch'
         Commands.watch(args)
       when 'clear-cache'
+        warn "WARNING: 'clear-cache' is deprecated and will be removed in a future version."
         Commands.clear_cache(args)
       else
         puts "Unknown command: #{command}"

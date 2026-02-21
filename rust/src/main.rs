@@ -38,6 +38,7 @@ fn main() -> Result<()> {
             commands::print_version();
         }
         Commands::ClearCache => {
+            eprintln!("WARNING: 'clear-cache' is deprecated and will be removed in a future version.");
             commands::clear_cache()?;
         }
     }

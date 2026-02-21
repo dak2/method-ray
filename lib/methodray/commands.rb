@@ -14,7 +14,6 @@ module MethodRay
             methodray version                 # Show version
             methodray check [FILE] [OPTIONS]  # Type check a Ruby file
             methodray watch FILE              # Watch file for changes and auto-check
-            methodray clear-cache             # Clear RBS method cache
 
           Examples:
             methodray check app/models/user.rb
