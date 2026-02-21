@@ -241,12 +241,8 @@ pub(crate) fn process_needs_child(
             block,
             arguments,
         } => {
-            // Use the same naming as method registration in definitions.rs
-            let recv_type_name = genv
-                .scope_manager
-                .current_class_name()
-                .or_else(|| genv.scope_manager.current_module_name());
-            let recv_vtx = if let Some(name) = recv_type_name {
+            // Use qualified name to match method registration in definitions.rs
+            let recv_vtx = if let Some(name) = genv.scope_manager.current_qualified_name() {
                 genv.new_source(Type::instance(&name))
             } else {
                 genv.new_source(Type::instance("Object"))
@@ -439,10 +435,10 @@ end
 "#;
         let genv = analyze(source);
 
-        // Method registered with simple class name "User" (current behavior of definitions.rs)
+        // Method registered with qualified name "Api::V1::User"
         let info = genv
-            .resolve_method(&Type::instance("User"), "greet")
-            .expect("User#greet should be registered");
+            .resolve_method(&Type::instance("Api::V1::User"), "greet")
+            .expect("Api::V1::User#greet should be registered");
         assert!(info.return_vertex.is_some());
 
         let ret_vtx = info.return_vertex.unwrap();
@@ -685,10 +681,10 @@ end
 "#;
         let genv = analyze(source);
 
-        // Registered with simple class name "User"
+        // Registered with qualified name "Api::User"
         let info = genv
-            .resolve_method(&Type::instance("User"), "name")
-            .expect("User#name should be registered");
+            .resolve_method(&Type::instance("Api::User"), "name")
+            .expect("Api::User#name should be registered");
         assert!(info.return_vertex.is_some());
         assert_eq!(get_type_show(&genv, info.return_vertex.unwrap()), "String");
     }
@@ -871,6 +867,29 @@ User.some_method
         assert!(
             genv.type_errors.is_empty(),
             "User.some_method should not produce type errors (Singleton suppression): {:?}",
+            genv.type_errors
+        );
+    }
+
+    // Test: ConstantPathNode.new resolves with qualified method name
+    #[test]
+    fn test_constant_path_new_with_qualified_method() {
+        let source = r#"
+module Api
+  class User
+    def name
+      "Alice"
+    end
+  end
+end
+
+Api::User.new.name
+"#;
+        let genv = analyze(source);
+        // Api::User.new.name should resolve correctly — no type errors
+        assert!(
+            genv.type_errors.is_empty(),
+            "Api::User.new.name should not produce type errors: {:?}",
             genv.type_errors
         );
     }

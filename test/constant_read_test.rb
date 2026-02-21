@@ -73,6 +73,50 @@ class ConstantReadTest < Minitest::Test
   end
 
   # ============================================
+  # Qualified name (ConstantPathNode)
+  # ============================================
+
+  def test_qualified_constant_path_new_method_call
+    source = <<~RUBY
+      module Api
+        class User
+          def name
+            "Alice"
+          end
+        end
+      end
+
+      Api::User.new.name.upcase
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_same_class_name_different_namespace
+    source = <<~RUBY
+      module Api
+        class User
+          def name
+            "api_user"
+          end
+        end
+      end
+
+      module Admin
+        class User
+          def role
+            "admin"
+          end
+        end
+      end
+
+      Api::User.new.name.upcase
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  # ============================================
   # Error Detection
   # ============================================
 
@@ -104,5 +148,21 @@ class ConstantReadTest < Minitest::Test
     RUBY
 
     assert_check_error(source, method_name: 'upcase', receiver_type: 'Integer')
+  end
+
+  def test_qualified_constant_path_new_type_error
+    source = <<~RUBY
+      module Api
+        class User
+          def name
+            "Alice"
+          end
+        end
+      end
+
+      Api::User.new.name.even?
+    RUBY
+
+    assert_check_error(source, method_name: 'even?', receiver_type: 'String')
   end
 end

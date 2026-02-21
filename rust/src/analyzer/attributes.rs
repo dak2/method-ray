@@ -18,10 +18,10 @@ pub(crate) fn process_attr_declaration(
     kind: AttrKind,
     attr_names: Vec<String>,
 ) {
-    let Some(class_name) = genv.scope_manager.current_class_name() else {
+    let Some(qualified_name) = genv.scope_manager.current_qualified_name() else {
         return;
     };
-    let recv_ty = Type::instance(&class_name);
+    let recv_ty = Type::instance(&qualified_name);
 
     for attr_name in attr_names {
         let ivar_name = format!("@{}", attr_name);

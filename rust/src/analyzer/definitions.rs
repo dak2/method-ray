@@ -83,10 +83,7 @@ pub(crate) fn process_def_node(
 
     // Register user-defined method with return vertex and param vertices (before exiting scope)
     if let Some(return_vtx) = last_vtx {
-        let recv_type_name = genv
-            .scope_manager
-            .current_class_name()
-            .or_else(|| genv.scope_manager.current_module_name());
+        let recv_type_name = genv.scope_manager.current_qualified_name();
 
         if let Some(name) = recv_type_name {
             genv.register_user_method(
@@ -333,5 +330,94 @@ mod tests {
             .resolve_method(&Type::instance("User"), "name")
             .expect("User#name should be registered");
         assert!(info.return_vertex.is_some());
+    }
+
+    #[test]
+    fn test_qualified_name_method_registration() {
+        let source = r#"
+module Api
+  module V1
+    class User
+      def name
+        "Alice"
+      end
+    end
+  end
+end
+"#;
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
+        let root = parse_result.node();
+        let program = root.as_program_node().unwrap();
+
+        let mut genv = GlobalEnv::new();
+        let mut lenv = LocalEnv::new();
+        let mut changes = ChangeSet::new();
+
+        for stmt in &program.statements().body() {
+            crate::analyzer::install::install_node(&mut genv, &mut lenv, &mut changes, source, &stmt);
+        }
+
+        // Method should be registered with qualified name "Api::V1::User"
+        let info = genv
+            .resolve_method(&Type::instance("Api::V1::User"), "name")
+            .expect("Api::V1::User#name should be registered");
+        assert!(info.return_vertex.is_some());
+
+        // Should NOT be registered with simple name "User"
+        assert!(
+            genv.resolve_method(&Type::instance("User"), "name").is_none(),
+            "User#name should not exist — method should be registered under qualified name"
+        );
+    }
+
+    #[test]
+    fn test_same_class_name_different_namespace() {
+        let source = r#"
+module Api
+  class User
+    def name
+      "api_user"
+    end
+  end
+end
+
+module Admin
+  class User
+    def name
+      "admin_user"
+    end
+  end
+end
+"#;
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
+        let root = parse_result.node();
+        let program = root.as_program_node().unwrap();
+
+        let mut genv = GlobalEnv::new();
+        let mut lenv = LocalEnv::new();
+        let mut changes = ChangeSet::new();
+
+        for stmt in &program.statements().body() {
+            crate::analyzer::install::install_node(&mut genv, &mut lenv, &mut changes, source, &stmt);
+        }
+
+        // Both should be registered separately
+        let api_info = genv
+            .resolve_method(&Type::instance("Api::User"), "name")
+            .expect("Api::User#name should be registered");
+        assert!(api_info.return_vertex.is_some());
+
+        let admin_info = genv
+            .resolve_method(&Type::instance("Admin::User"), "name")
+            .expect("Admin::User#name should be registered");
+        assert!(admin_info.return_vertex.is_some());
+
+        // Simple "User" should not resolve
+        assert!(
+            genv.resolve_method(&Type::instance("User"), "name").is_none(),
+            "User#name should not exist — both are under qualified names"
+        );
     }
 }

@@ -209,10 +209,7 @@ impl GlobalEnv {
     /// Enter a method scope
     pub fn enter_method(&mut self, name: String) -> ScopeId {
         // Look for class or module context
-        let receiver_type = self
-            .scope_manager
-            .current_class_name()
-            .or_else(|| self.scope_manager.current_module_name());
+        let receiver_type = self.scope_manager.current_qualified_name();
         let scope_id = self.scope_manager.new_scope(ScopeKind::Method {
             name,
             receiver_type,
