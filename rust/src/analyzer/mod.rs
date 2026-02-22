@@ -8,6 +8,7 @@ mod install;
 mod literals;
 mod parameters;
 mod parentheses;
+mod returns;
 mod variables;
 
 pub use install::AstInstaller;

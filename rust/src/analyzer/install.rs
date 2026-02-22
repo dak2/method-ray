@@ -14,6 +14,7 @@ use super::definitions::{process_class_node, process_def_node, process_module_no
 use super::dispatch::{dispatch_needs_child, dispatch_simple, process_needs_child, DispatchResult};
 use super::literals::install_literal_node;
 use super::parentheses::process_parentheses_node;
+use super::returns::process_return_node;
 
 /// Build graph from AST (public API wrapper)
 pub struct AstInstaller<'a> {
@@ -79,6 +80,10 @@ pub(crate) fn install_node(
 
     if let Some(paren_node) = node.as_parentheses_node() {
         return process_parentheses_node(genv, lenv, changes, source, &paren_node);
+    }
+
+    if let Some(return_node) = node.as_return_node() {
+        return process_return_node(genv, lenv, changes, source, &return_node);
     }
 
     match dispatch_simple(genv, lenv, node) {
