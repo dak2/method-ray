@@ -215,4 +215,90 @@ class ConditionalTest < Minitest::Test
 
     assert_check_error(source, method_name: 'upcase', receiver_type: 'Integer')
   end
+
+  # ============================================
+  # Ternary Operator - Type Inference
+  # ============================================
+
+  def test_ternary_union_type
+    source = <<~RUBY
+      x = true ? "hello" : 42
+    RUBY
+
+    types = infer(source)
+    assert_equal "(Integer | String)", types["x"]
+  end
+
+  def test_ternary_same_type
+    source = <<~RUBY
+      x = true ? "hello" : "world"
+    RUBY
+
+    assert_type source, "x", "String"
+  end
+
+  def test_ternary_nil_branch
+    source = <<~RUBY
+      x = true ? "hello" : nil
+    RUBY
+
+    types = infer(source)
+    assert_equal "(String | nil)", types["x"]
+  end
+
+  # ============================================
+  # Ternary Operator - No Error
+  # ============================================
+
+  def test_ternary_string_upcase
+    source = <<~RUBY
+      class Foo
+        def bar
+          true ? "a" : "b"
+        end
+
+        def baz
+          self.bar.upcase
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  # ============================================
+  # Ternary Operator - Error Detection
+  # ============================================
+
+  def test_ternary_string_even_error
+    source = <<~RUBY
+      class Foo
+        def bar
+          true ? "a" : "b"
+        end
+
+        def baz
+          self.bar.even?
+        end
+      end
+    RUBY
+
+    assert_check_error(source, method_name: 'even?', receiver_type: 'String')
+  end
+
+  def test_ternary_nested_error
+    source = <<~RUBY
+      class Foo
+        def bar
+          true ? (false ? "inner" : "other") : "fallback"
+        end
+
+        def baz
+          self.bar.even?
+        end
+      end
+    RUBY
+
+    assert_check_error(source, method_name: 'even?', receiver_type: 'String')
+  end
 end
