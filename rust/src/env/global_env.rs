@@ -210,9 +210,11 @@ impl GlobalEnv {
     pub fn enter_method(&mut self, name: String) -> ScopeId {
         // Look for class or module context
         let receiver_type = self.scope_manager.current_qualified_name();
+        let return_vertex = Some(self.new_vertex());
         let scope_id = self.scope_manager.new_scope(ScopeKind::Method {
             name,
             receiver_type,
+            return_vertex,
         });
         self.scope_manager.enter_scope(scope_id);
         scope_id

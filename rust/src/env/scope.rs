@@ -20,6 +20,7 @@ pub enum ScopeKind {
     Method {
         name: String,
         receiver_type: Option<String>, // Receiver class/module name
+        return_vertex: Option<VertexId>, // Merge vertex for return statements
     },
     Block,
 }
@@ -309,6 +310,22 @@ impl ScopeManager {
         Some(result)
     }
 
+    /// Get return_vertex from the nearest enclosing method scope
+    pub fn current_method_return_vertex(&self) -> Option<VertexId> {
+        let mut current = Some(self.current_scope);
+        while let Some(scope_id) = current {
+            if let Some(scope) = self.scopes.get(&scope_id) {
+                if let ScopeKind::Method { return_vertex, .. } = &scope.kind {
+                    return *return_vertex;
+                }
+                current = scope.parent;
+            } else {
+                break;
+            }
+        }
+        None
+    }
+
     /// Lookup instance variable in enclosing module scope
     pub fn lookup_instance_var_in_module(&self, name: &str) -> Option<VertexId> {
         let mut current = Some(self.current_scope);
@@ -448,6 +465,7 @@ mod tests {
         let method_id = sm.new_scope(ScopeKind::Method {
             name: "test".to_string(),
             receiver_type: None,
+            return_vertex: None,
         });
         sm.enter_scope(method_id);
 
@@ -472,6 +490,7 @@ mod tests {
         let method_id = sm.new_scope(ScopeKind::Method {
             name: "helper".to_string(),
             receiver_type: Some("Utils".to_string()),
+            return_vertex: None,
         });
         sm.enter_scope(method_id);
 
@@ -500,6 +519,7 @@ mod tests {
         let method_id = sm.new_scope(ScopeKind::Method {
             name: "get_setting".to_string(),
             receiver_type: Some("Config".to_string()),
+            return_vertex: None,
         });
         sm.enter_scope(method_id);
 
@@ -559,6 +579,7 @@ mod tests {
         let method_id = sm.new_scope(ScopeKind::Method {
             name: "greet".to_string(),
             receiver_type: None,
+            return_vertex: None,
         });
         sm.enter_scope(method_id);
 

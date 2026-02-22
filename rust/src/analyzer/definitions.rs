@@ -67,6 +67,8 @@ pub(crate) fn process_def_node(
     let method_name = String::from_utf8_lossy(def_node.name().as_slice()).to_string();
     install_method(genv, method_name.clone());
 
+    let merge_vtx = genv.scope_manager.current_method_return_vertex();
+
     // Process parameters BEFORE processing body
     let param_vtxs = if let Some(params_node) = def_node.parameters() {
         install_parameters(genv, lenv, changes, source, &params_node)
@@ -81,15 +83,22 @@ pub(crate) fn process_def_node(
         }
     }
 
-    // Register user-defined method with return vertex and param vertices (before exiting scope)
-    if let Some(return_vtx) = last_vtx {
+    // Connect last expression to merge vertex so that implicit return
+    // (Ruby's last-expression-is-return-value) is included in the union type
+    if let (Some(last), Some(merge)) = (last_vtx, merge_vtx) {
+        genv.add_edge(last, merge);
+    }
+
+    // Register user-defined method with merge vertex as return vertex
+    let return_vtx = merge_vtx.or(last_vtx);
+    if let Some(ret_vtx) = return_vtx {
         let recv_type_name = genv.scope_manager.current_qualified_name();
 
         if let Some(name) = recv_type_name {
             genv.register_user_method(
                 Type::instance(&name),
                 &method_name,
-                return_vtx,
+                ret_vtx,
                 param_vtxs,
             );
         }
