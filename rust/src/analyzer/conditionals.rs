@@ -463,4 +463,76 @@ end
         let ret_vtx = info.return_vertex.unwrap();
         assert_eq!(get_type_show(&genv, ret_vtx), "String");
     }
+
+    // Test 11: ternary operator - different types → union
+    #[test]
+    fn test_ternary_union_type() {
+        let source = r#"
+class Foo
+  def bar
+    true ? "hello" : 42
+  end
+end
+"#;
+        let genv = analyze(source);
+        let info = genv
+            .resolve_method(&Type::instance("Foo"), "bar")
+            .expect("Foo#bar should be registered");
+        let ret_vtx = info.return_vertex.unwrap();
+        assert_eq!(get_type_show(&genv, ret_vtx), "(Integer | String)");
+    }
+
+    // Test 12: ternary operator - same type → single type
+    #[test]
+    fn test_ternary_same_type() {
+        let source = r#"
+class Foo
+  def bar
+    true ? "hello" : "world"
+  end
+end
+"#;
+        let genv = analyze(source);
+        let info = genv
+            .resolve_method(&Type::instance("Foo"), "bar")
+            .expect("Foo#bar should be registered");
+        let ret_vtx = info.return_vertex.unwrap();
+        assert_eq!(get_type_show(&genv, ret_vtx), "String");
+    }
+
+    // Test 13: ternary operator - nil branch → union with nil
+    #[test]
+    fn test_ternary_nil_branch() {
+        let source = r#"
+class Foo
+  def bar
+    true ? "hello" : nil
+  end
+end
+"#;
+        let genv = analyze(source);
+        let info = genv
+            .resolve_method(&Type::instance("Foo"), "bar")
+            .expect("Foo#bar should be registered");
+        let ret_vtx = info.return_vertex.unwrap();
+        assert_eq!(get_type_show(&genv, ret_vtx), "(String | nil)");
+    }
+
+    // Test 14: nested ternary operator
+    #[test]
+    fn test_ternary_nested() {
+        let source = r#"
+class Foo
+  def bar
+    true ? (false ? "inner" : 42) : :sym
+  end
+end
+"#;
+        let genv = analyze(source);
+        let info = genv
+            .resolve_method(&Type::instance("Foo"), "bar")
+            .expect("Foo#bar should be registered");
+        let ret_vtx = info.return_vertex.unwrap();
+        assert_eq!(get_type_show(&genv, ret_vtx), "(Integer | String | Symbol)");
+    }
 }
