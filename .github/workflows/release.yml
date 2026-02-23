@@ -80,7 +80,7 @@ jobs:
       - name: Generate RBS cache
         run: |
           echo "Generating RBS cache..."
-          ruby -I lib -rmethodray -e 'MethodRay.setup'
+          ruby -I lib -rmethodray -e '1'
           # Copy cache to lib directory for bundling
           # macOS uses ~/Library/Caches, Linux uses ~/.cache
           if [[ "${{ runner.os }}" == "macOS" ]]; then
