@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-02-23
+
+### Fixed
+
+- Embed `method_loader.rb` at compile time with `include_str!` to eliminate runtime dependency on source directory ([#35](https://github.com/dak2/method-ray/pull/35))
+
 ## [0.1.5] - 2026-02-23
 
 ### Added
@@ -89,6 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - `methodray check` - Static type checking for Ruby files
 
+[0.1.6]: https://github.com/dak2/method-ray/releases/tag/v0.1.6
 [0.1.5]: https://github.com/dak2/method-ray/releases/tag/v0.1.5
 [0.1.4]: https://github.com/dak2/method-ray/releases/tag/v0.1.4
 [0.1.3]: https://github.com/dak2/method-ray/releases/tag/v0.1.3
