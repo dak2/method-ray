@@ -17,8 +17,7 @@ impl FileChecker {
         // Just verify cache exists
         use crate::cache::RbsCache;
         RbsCache::load().context(
-            "Failed to load RBS cache. Please run from Ruby first to generate cache:\n\
-             ruby -rmethodray -e 'MethodRay::Analyzer.new(\".\").infer_types(\"x=1\")'",
+            "Failed to load RBS cache.",
         )?;
 
         Ok(Self {})
@@ -70,8 +69,7 @@ fn load_rbs_from_cache(genv: &mut GlobalEnv) -> Result<()> {
     use crate::types::Type;
 
     let cache = RbsCache::load().context(
-        "Failed to load RBS cache. Please run from Ruby first to generate cache:\n\
-         ruby -rmethodray -e 'MethodRay::Analyzer.new(\".\").infer_types(\"x=1\")'",
+        "Failed to load RBS cache.",
     )?;
 
     let methods = cache.methods();

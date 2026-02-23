@@ -1,9 +1,6 @@
 $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
 require "methodray"
 
-# Ensure RBS cache exists before any test runs (CheckTest CLI tests depend on it)
-MethodRay.setup
-
 require "minitest/autorun"
 require "tempfile"
 require "open3"
@@ -12,8 +9,7 @@ module CLITestHelper
   private
 
   def infer(source)
-    analyzer = MethodRay::Analyzer.new("test")
-    result = analyzer.infer_types(source)
+    result = MethodRay.infer_types(source)
     types = {}
     result.each_line do |line|
       line = line.strip
