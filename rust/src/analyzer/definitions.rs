@@ -65,6 +65,13 @@ pub(crate) fn process_def_node(
     def_node: &ruby_prism::DefNode,
 ) -> Option<VertexId> {
     let method_name = String::from_utf8_lossy(def_node.name().as_slice()).to_string();
+
+    // Check if this is a class method (def self.foo)
+    let is_class_method = def_node
+        .receiver()
+        .map(|r| r.as_self_node().is_some())
+        .unwrap_or(false);
+
     install_method(genv, method_name.clone());
 
     let merge_vtx = genv.scope_manager.current_method_return_vertex();
@@ -95,8 +102,13 @@ pub(crate) fn process_def_node(
         let recv_type_name = genv.scope_manager.current_qualified_name();
 
         if let Some(name) = recv_type_name {
+            let recv_type = if is_class_method {
+                Type::singleton(&name)
+            } else {
+                Type::instance(&name)
+            };
             genv.register_user_method(
-                Type::instance(&name),
+                recv_type,
                 &method_name,
                 ret_vtx,
                 param_vtxs,
@@ -428,5 +440,275 @@ end
             genv.resolve_method(&Type::instance("User"), "name").is_none(),
             "User#name should not exist — both are under qualified names"
         );
+    }
+
+    #[test]
+    fn test_class_method_registration() {
+        let source = r#"
+class User
+  def self.create
+    "created"
+  end
+end
+"#;
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
+        let root = parse_result.node();
+        let program = root.as_program_node().unwrap();
+
+        let mut genv = GlobalEnv::new();
+        let mut lenv = LocalEnv::new();
+        let mut changes = ChangeSet::new();
+
+        for stmt in &program.statements().body() {
+            crate::analyzer::install::install_node(&mut genv, &mut lenv, &mut changes, source, &stmt);
+        }
+
+        // def self.create should be registered as singleton method
+        let info = genv
+            .resolve_method(&Type::singleton("User"), "create")
+            .expect("User.create should be registered as singleton method");
+        assert!(info.return_vertex.is_some());
+    }
+
+    #[test]
+    fn test_class_method_with_params() {
+        let source = r#"
+class User
+  def self.find(id)
+    "user"
+  end
+end
+"#;
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
+        let root = parse_result.node();
+        let program = root.as_program_node().unwrap();
+
+        let mut genv = GlobalEnv::new();
+        let mut lenv = LocalEnv::new();
+        let mut changes = ChangeSet::new();
+
+        for stmt in &program.statements().body() {
+            crate::analyzer::install::install_node(&mut genv, &mut lenv, &mut changes, source, &stmt);
+        }
+
+        let info = genv
+            .resolve_method(&Type::singleton("User"), "find")
+            .expect("User.find should be registered");
+        assert!(info.return_vertex.is_some());
+        assert_eq!(info.param_vertices.as_ref().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_class_method_in_qualified_namespace() {
+        let source = r#"
+module Api
+  class User
+    def self.create
+      "created"
+    end
+  end
+end
+"#;
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
+        let root = parse_result.node();
+        let program = root.as_program_node().unwrap();
+
+        let mut genv = GlobalEnv::new();
+        let mut lenv = LocalEnv::new();
+        let mut changes = ChangeSet::new();
+
+        for stmt in &program.statements().body() {
+            crate::analyzer::install::install_node(&mut genv, &mut lenv, &mut changes, source, &stmt);
+        }
+
+        let info = genv
+            .resolve_method(&Type::singleton("Api::User"), "create")
+            .expect("Api::User.create should be registered");
+        assert!(info.return_vertex.is_some());
+    }
+
+    #[test]
+    fn test_class_method_not_registered_as_instance() {
+        let source = r#"
+class User
+  def self.create
+    "created"
+  end
+end
+"#;
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
+        let root = parse_result.node();
+        let program = root.as_program_node().unwrap();
+
+        let mut genv = GlobalEnv::new();
+        let mut lenv = LocalEnv::new();
+        let mut changes = ChangeSet::new();
+
+        for stmt in &program.statements().body() {
+            crate::analyzer::install::install_node(&mut genv, &mut lenv, &mut changes, source, &stmt);
+        }
+
+        // def self.create should NOT be registered as instance method
+        assert!(
+            genv.resolve_method(&Type::instance("User"), "create").is_none(),
+            "User#create should not exist — it's a class method"
+        );
+    }
+
+    #[test]
+    fn test_non_self_receiver_not_treated_as_class_method() {
+        let source = r#"
+class User
+  def other.foo
+    "test"
+  end
+end
+"#;
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
+        let root = parse_result.node();
+        let program = root.as_program_node().unwrap();
+
+        let mut genv = GlobalEnv::new();
+        let mut lenv = LocalEnv::new();
+        let mut changes = ChangeSet::new();
+
+        for stmt in &program.statements().body() {
+            crate::analyzer::install::install_node(&mut genv, &mut lenv, &mut changes, source, &stmt);
+        }
+
+        // def other.foo should NOT be registered as singleton method
+        assert!(
+            genv.resolve_method(&Type::singleton("User"), "foo").is_none(),
+            "User.foo should not exist — receiver is not self"
+        );
+    }
+
+    #[test]
+    fn test_class_method_return_type_inference() {
+        let source = r#"
+class User
+  def self.create
+    "created"
+  end
+end
+"#;
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
+        let root = parse_result.node();
+        let program = root.as_program_node().unwrap();
+
+        let mut genv = GlobalEnv::new();
+        let mut lenv = LocalEnv::new();
+        let mut changes = ChangeSet::new();
+
+        for stmt in &program.statements().body() {
+            crate::analyzer::install::install_node(&mut genv, &mut lenv, &mut changes, source, &stmt);
+        }
+
+        let info = genv
+            .resolve_method(&Type::singleton("User"), "create")
+            .expect("User.create should be registered");
+        let ret_vtx = info.return_vertex.expect("should have return vertex");
+
+        // Run solver to propagate types
+        genv.apply_changes(changes);
+        genv.run_all();
+
+        let vertex = genv.get_vertex(ret_vtx).or_else(|| {
+            // return vertex might be a source
+            None
+        });
+        if let Some(v) = vertex {
+            assert_eq!(v.show(), "String");
+        } else {
+            // Check if it's a source
+            let src = genv.get_source(ret_vtx).expect("should have source or vertex");
+            assert_eq!(src.ty, Type::string());
+        }
+    }
+
+    #[test]
+    fn test_class_method_in_reopened_class() {
+        let source = r#"
+class User
+  def self.create
+    "created"
+  end
+end
+
+class User
+  def self.destroy
+    "destroyed"
+  end
+end
+"#;
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
+        let root = parse_result.node();
+        let program = root.as_program_node().unwrap();
+
+        let mut genv = GlobalEnv::new();
+        let mut lenv = LocalEnv::new();
+        let mut changes = ChangeSet::new();
+
+        for stmt in &program.statements().body() {
+            crate::analyzer::install::install_node(&mut genv, &mut lenv, &mut changes, source, &stmt);
+        }
+
+        // Both class methods should be registered
+        assert!(
+            genv.resolve_method(&Type::singleton("User"), "create").is_some(),
+            "User.create should be registered"
+        );
+        assert!(
+            genv.resolve_method(&Type::singleton("User"), "destroy").is_some(),
+            "User.destroy should be registered"
+        );
+    }
+
+    #[test]
+    fn test_class_method_param_type_propagation() {
+        let source = r#"
+class User
+  def self.find(id)
+    id
+  end
+end
+
+User.find(42)
+"#;
+        let session = ParseSession::new();
+        let parse_result = session.parse_source(source, "test.rb").unwrap();
+        let root = parse_result.node();
+        let program = root.as_program_node().unwrap();
+
+        let mut genv = GlobalEnv::new();
+        let mut lenv = LocalEnv::new();
+        let mut changes = ChangeSet::new();
+
+        for stmt in &program.statements().body() {
+            crate::analyzer::install::install_node(&mut genv, &mut lenv, &mut changes, source, &stmt);
+        }
+
+        let info = genv
+            .resolve_method(&Type::singleton("User"), "find")
+            .expect("User.find should be registered");
+        let param_vtxs = info.param_vertices.as_ref().expect("should have param vertices");
+        assert_eq!(param_vtxs.len(), 1);
+
+        let param_vtx = param_vtxs[0];
+
+        // Run solver to propagate argument types
+        genv.apply_changes(changes);
+        genv.run_all();
+
+        // Parameter should have Integer type propagated from call site
+        let vertex = genv.get_vertex(param_vtx).expect("param vertex should exist");
+        assert_eq!(vertex.show(), "Integer");
     }
 }

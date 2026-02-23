@@ -132,8 +132,10 @@ impl BoxTrait for MethodCallBox {
                     self.location.clone(),
                 );
             } else if matches!(&recv_ty, Type::Singleton { .. }) {
-                // Skip error for unknown class methods on Singleton types
-                // (class method RBS registration is not yet supported)
+                // Skip error for unknown class methods on Singleton types.
+                // User-defined class methods (def self.foo) are resolved by
+                // resolve_method above. Only unresolved methods reach here
+                // (e.g., RBS class methods not yet supported).
                 continue;
             } else {
                 // Record type error for diagnostic reporting
