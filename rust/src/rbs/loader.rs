@@ -37,12 +37,11 @@ impl<'a> RbsLoader<'a> {
 
     /// Load all method definitions from RBS
     pub fn load_methods(&self) -> Result<Vec<RbsMethodInfo>, RbsError> {
-        // Load method_loader.rb
-        let rb_path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/rbs/method_loader.rb");
-        let load_code = format!("require '{}'", rb_path);
+        // Load method_loader.rb (embedded at compile time to avoid hardcoded paths)
+        let ruby_code = include_str!("method_loader.rb");
         let _: Value = self
             .ruby
-            .eval(&load_code)
+            .eval(ruby_code)
             .map_err(|e| RbsError::LoadError(format!("Failed to load method_loader.rb: {}", e)))?;
 
         // Instantiate Rbs::MethodLoader class and call method

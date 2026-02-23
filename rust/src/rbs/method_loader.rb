@@ -4,6 +4,8 @@ require 'rbs'
 
 # TODO: use ruby-rbs crate when available
 # https://github.com/ruby/rbs/pull/2808
+return if defined?(Rbs::MethodLoader)
+
 module Rbs
   class MethodLoader
     TARGET_CLASSES = %w[
