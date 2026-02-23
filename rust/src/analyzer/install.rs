@@ -14,6 +14,7 @@ use super::definitions::{process_class_node, process_def_node, process_module_no
 use super::dispatch::{dispatch_needs_child, dispatch_simple, process_needs_child, DispatchResult};
 use super::literals::install_literal_node;
 use super::parentheses::process_parentheses_node;
+use super::operators::{process_and_node, process_or_node};
 use super::returns::process_return_node;
 
 /// Build graph from AST (public API wrapper)
@@ -84,6 +85,13 @@ pub(crate) fn install_node(
 
     if let Some(return_node) = node.as_return_node() {
         return process_return_node(genv, lenv, changes, source, &return_node);
+    }
+
+    if let Some(and_node) = node.as_and_node() {
+        return process_and_node(genv, lenv, changes, source, &and_node);
+    }
+    if let Some(or_node) = node.as_or_node() {
+        return process_or_node(genv, lenv, changes, source, &or_node);
     }
 
     match dispatch_simple(genv, lenv, node) {
