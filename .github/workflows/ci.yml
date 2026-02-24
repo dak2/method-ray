@@ -29,6 +29,9 @@ jobs:
           workspaces: |
             ext -> target
 
+      - name: Rust test
+        run: cargo test --manifest-path rust/Cargo.toml
+
       - name: Build and test
         run: |
           bundle exec rake compile
