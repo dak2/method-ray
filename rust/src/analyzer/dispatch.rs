@@ -463,8 +463,8 @@ end
 
         // Utils.run should be registered
         let info = genv
-            .resolve_method(&Type::instance("Utils"), "run")
-            .expect("Utils#run should be registered");
+            .resolve_method(&Type::singleton("Utils"), "run")
+            .expect("Utils.run should be registered");
         assert!(info.return_vertex.is_some());
     }
 
