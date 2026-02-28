@@ -12,6 +12,7 @@ module Rbs
       String Integer Float Array Hash Symbol
       TrueClass FalseClass NilClass
       Range Regexp Struct Enumerable
+      Kernel Object
     ].freeze
 
     def initialize
