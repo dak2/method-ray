@@ -168,6 +168,49 @@ class ObjectTest < Minitest::Test
   end
 
   # ============================================
+  # Fallback (user-defined class → Object)
+  # ============================================
+
+  def test_nil_check_on_user_defined_class
+    source = <<~RUBY
+      class Account
+        def valid?
+          other = Account.new
+          other.nil?
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_class_on_user_defined_class
+    source = <<~RUBY
+      class Entity
+        def type_name
+          other = Entity.new
+          other.class
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_to_s_on_user_defined_class
+    source = <<~RUBY
+      class Label
+        def display
+          other = Label.new
+          other.to_s
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  # ============================================
   # Override
   # ============================================
 
