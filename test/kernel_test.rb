@@ -105,6 +105,59 @@ class KernelTest < Minitest::Test
   end
 
   # ============================================
+  # Fallback (user-defined class → Kernel)
+  # ============================================
+
+  def test_puts_on_user_defined_class
+    source = <<~RUBY
+      class MyApp
+        def run
+          puts "hello"
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_raise_on_user_defined_class
+    source = <<~RUBY
+      class Validator
+        def validate!
+          raise "invalid"
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_block_given_on_user_defined_class
+    source = <<~RUBY
+      class Runner
+        def execute
+          block_given?
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_kernel_method_on_user_defined_class_explicit_receiver
+    source = <<~RUBY
+      class Wrapper
+        def check(other)
+          other = Wrapper.new
+          other.frozen?
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  # ============================================
   # Override
   # ============================================
 
