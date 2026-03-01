@@ -189,20 +189,36 @@ impl GlobalEnv {
 
     // ===== Scope Management =====
 
+    /// Register a constant (simple name → qualified name) in the parent scope
+    fn register_constant_in_parent(&mut self, scope_id: ScopeId, name: &str) {
+        if name.contains("::") { return; }
+        let qualified = self.scope_manager.current_qualified_name()
+            .unwrap_or_else(|| name.to_string());
+        if let Some(parent_id) = self.scope_manager.get_scope(scope_id)
+            .and_then(|s| s.parent)
+        {
+            if let Some(parent_scope) = self.scope_manager.get_scope_mut(parent_id) {
+                parent_scope.constants.insert(name.to_string(), qualified);
+            }
+        }
+    }
+
     /// Enter a class scope
     pub fn enter_class(&mut self, name: String) -> ScopeId {
         let scope_id = self.scope_manager.new_scope(ScopeKind::Class {
-            name,
+            name: name.clone(),
             superclass: None,
         });
         self.scope_manager.enter_scope(scope_id);
+        self.register_constant_in_parent(scope_id, &name);
         scope_id
     }
 
     /// Enter a module scope
     pub fn enter_module(&mut self, name: String) -> ScopeId {
-        let scope_id = self.scope_manager.new_scope(ScopeKind::Module { name });
+        let scope_id = self.scope_manager.new_scope(ScopeKind::Module { name: name.clone() });
         self.scope_manager.enter_scope(scope_id);
+        self.register_constant_in_parent(scope_id, &name);
         scope_id
     }
 

@@ -41,6 +41,9 @@ pub struct Scope {
 
     /// Class variables (class scope only)
     pub class_vars: HashMap<String, VertexId>,
+
+    /// Constants (simple name → qualified name)
+    pub constants: HashMap<String, String>,
 }
 
 #[allow(dead_code)]
@@ -53,6 +56,7 @@ impl Scope {
             local_vars: HashMap::new(),
             instance_vars: HashMap::new(),
             class_vars: HashMap::new(),
+            constants: HashMap::new(),
         }
     }
 
@@ -135,6 +139,18 @@ impl ScopeManager {
         self.scopes.get_mut(&self.current_scope).unwrap()
     }
 
+    /// Walk scopes from current scope up to the top-level, yielding each scope
+    fn walk_scopes(&self) -> impl Iterator<Item = &Scope> + '_ {
+        let scopes = &self.scopes;
+        let mut current = Some(self.current_scope);
+        std::iter::from_fn(move || {
+            let scope_id = current?;
+            let scope = scopes.get(&scope_id)?;
+            current = scope.parent;
+            Some(scope)
+        })
+    }
+
     /// Get scope by ID
     pub fn get_scope(&self, id: ScopeId) -> Option<&Scope> {
         self.scopes.get(&id)
@@ -147,103 +163,54 @@ impl ScopeManager {
 
     /// Lookup variable in current scope or parent scopes
     pub fn lookup_var(&self, name: &str) -> Option<VertexId> {
-        let mut current = Some(self.current_scope);
+        self.walk_scopes().find_map(|scope| scope.get_local_var(name))
+    }
 
-        while let Some(scope_id) = current {
-            if let Some(scope) = self.scopes.get(&scope_id) {
-                if let Some(vtx) = scope.get_local_var(name) {
-                    return Some(vtx);
-                }
-                current = scope.parent;
-            } else {
-                break;
-            }
-        }
-
-        None
+    /// Lookup constant in current scope or parent scopes (simple name → qualified name)
+    pub fn lookup_constant(&self, simple_name: &str) -> Option<String> {
+        self.walk_scopes()
+            .find_map(|scope| scope.constants.get(simple_name).cloned())
     }
 
     /// Lookup instance variable in enclosing class scope
     pub fn lookup_instance_var(&self, name: &str) -> Option<VertexId> {
-        let mut current = Some(self.current_scope);
-
-        while let Some(scope_id) = current {
-            if let Some(scope) = self.scopes.get(&scope_id) {
-                // Walk up to class scope
-                match &scope.kind {
-                    ScopeKind::Class { .. } => {
-                        return scope.get_instance_var(name);
-                    }
-                    _ => {
-                        current = scope.parent;
-                    }
-                }
-            } else {
-                break;
-            }
-        }
-
-        None
+        self.walk_scopes()
+            .find(|scope| matches!(&scope.kind, ScopeKind::Class { .. }))
+            .and_then(|scope| scope.get_instance_var(name))
     }
 
     /// Set instance variable in enclosing class scope
     pub fn set_instance_var_in_class(&mut self, name: String, vtx: VertexId) {
-        let mut current = Some(self.current_scope);
-
-        while let Some(scope_id) = current {
-            if let Some(scope) = self.scopes.get(&scope_id) {
-                // Find class scope and set variable
-                match &scope.kind {
-                    ScopeKind::Class { .. } => {
-                        if let Some(class_scope) = self.scopes.get_mut(&scope_id) {
-                            class_scope.set_instance_var(name, vtx);
-                        }
-                        return;
-                    }
-                    _ => {
-                        current = scope.parent;
-                    }
-                }
-            } else {
-                break;
+        let class_scope_id = self.walk_scopes()
+            .find(|scope| matches!(&scope.kind, ScopeKind::Class { .. }))
+            .map(|scope| scope.id);
+        if let Some(scope_id) = class_scope_id {
+            if let Some(scope) = self.scopes.get_mut(&scope_id) {
+                scope.set_instance_var(name, vtx);
             }
         }
     }
 
     /// Get current class name (simple name, not qualified)
     pub fn current_class_name(&self) -> Option<String> {
-        let mut current = Some(self.current_scope);
-
-        while let Some(scope_id) = current {
-            if let Some(scope) = self.scopes.get(&scope_id) {
-                if let ScopeKind::Class { name, .. } = &scope.kind {
-                    return Some(name.clone());
-                }
-                current = scope.parent;
+        self.walk_scopes().find_map(|scope| {
+            if let ScopeKind::Class { name, .. } = &scope.kind {
+                Some(name.clone())
             } else {
-                break;
+                None
             }
-        }
-
-        None
+        })
     }
 
     /// Get current module name (simple name, not qualified)
     pub fn current_module_name(&self) -> Option<String> {
-        let mut current = Some(self.current_scope);
-
-        while let Some(scope_id) = current {
-            if let Some(scope) = self.scopes.get(&scope_id) {
-                if let ScopeKind::Module { name } = &scope.kind {
-                    return Some(name.clone());
-                }
-                current = scope.parent;
+        self.walk_scopes().find_map(|scope| {
+            if let ScopeKind::Module { name } = &scope.kind {
+                Some(name.clone())
             } else {
-                break;
+                None
             }
-        }
-
-        None
+        })
     }
 
     /// Get current fully qualified name by traversing all parent class/module scopes
@@ -260,36 +227,12 @@ impl ScopeManager {
     /// ```
     /// When inside `greet`, this returns `Some("Api::V1::User")`
     pub fn current_qualified_name(&self) -> Option<String> {
-        let mut path_segments: Vec<String> = Vec::new();
-        let mut current = Some(self.current_scope);
-
-        // Traverse from current scope up to top-level, collecting class/module names
-        while let Some(scope_id) = current {
-            if let Some(scope) = self.scopes.get(&scope_id) {
-                match &scope.kind {
-                    ScopeKind::Class { name, .. } => {
-                        // If the name already contains ::, it's a qualified name from AST
-                        // (e.g., `class Api::User` defined at top level)
-                        if name.contains("::") {
-                            path_segments.push(name.clone());
-                        } else {
-                            path_segments.push(name.clone());
-                        }
-                    }
-                    ScopeKind::Module { name } => {
-                        if name.contains("::") {
-                            path_segments.push(name.clone());
-                        } else {
-                            path_segments.push(name.clone());
-                        }
-                    }
-                    _ => {}
-                }
-                current = scope.parent;
-            } else {
-                break;
-            }
-        }
+        let mut path_segments: Vec<&str> = self.walk_scopes()
+            .filter_map(|scope| match &scope.kind {
+                ScopeKind::Class { name, .. } | ScopeKind::Module { name } => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
 
         if path_segments.is_empty() {
             return None;
@@ -297,76 +240,35 @@ impl ScopeManager {
 
         // Reverse to get from outermost to innermost
         path_segments.reverse();
-
-        // Join all segments, handling cases where segments may already contain ::
-        let mut result = String::new();
-        for segment in path_segments {
-            if !result.is_empty() {
-                result.push_str("::");
-            }
-            result.push_str(&segment);
-        }
-
-        Some(result)
+        Some(path_segments.join("::"))
     }
 
     /// Get return_vertex from the nearest enclosing method scope
     pub fn current_method_return_vertex(&self) -> Option<VertexId> {
-        let mut current = Some(self.current_scope);
-        while let Some(scope_id) = current {
-            if let Some(scope) = self.scopes.get(&scope_id) {
-                if let ScopeKind::Method { return_vertex, .. } = &scope.kind {
-                    return *return_vertex;
-                }
-                current = scope.parent;
+        self.walk_scopes().find_map(|scope| {
+            if let ScopeKind::Method { return_vertex, .. } = &scope.kind {
+                *return_vertex
             } else {
-                break;
+                None
             }
-        }
-        None
+        })
     }
 
     /// Lookup instance variable in enclosing module scope
     pub fn lookup_instance_var_in_module(&self, name: &str) -> Option<VertexId> {
-        let mut current = Some(self.current_scope);
-
-        while let Some(scope_id) = current {
-            if let Some(scope) = self.scopes.get(&scope_id) {
-                match &scope.kind {
-                    ScopeKind::Module { .. } => {
-                        return scope.get_instance_var(name);
-                    }
-                    _ => {
-                        current = scope.parent;
-                    }
-                }
-            } else {
-                break;
-            }
-        }
-
-        None
+        self.walk_scopes()
+            .find(|scope| matches!(&scope.kind, ScopeKind::Module { .. }))
+            .and_then(|scope| scope.get_instance_var(name))
     }
 
     /// Set instance variable in enclosing module scope
     pub fn set_instance_var_in_module(&mut self, name: String, vtx: VertexId) {
-        let mut current = Some(self.current_scope);
-
-        while let Some(scope_id) = current {
-            if let Some(scope) = self.scopes.get(&scope_id) {
-                match &scope.kind {
-                    ScopeKind::Module { .. } => {
-                        if let Some(module_scope) = self.scopes.get_mut(&scope_id) {
-                            module_scope.set_instance_var(name, vtx);
-                        }
-                        return;
-                    }
-                    _ => {
-                        current = scope.parent;
-                    }
-                }
-            } else {
-                break;
+        let module_scope_id = self.walk_scopes()
+            .find(|scope| matches!(&scope.kind, ScopeKind::Module { .. }))
+            .map(|scope| scope.id);
+        if let Some(scope_id) = module_scope_id {
+            if let Some(scope) = self.scopes.get_mut(&scope_id) {
+                scope.set_instance_var(name, vtx);
             }
         }
     }
@@ -613,5 +515,73 @@ mod tests {
 
         // At top level, no class/module
         assert_eq!(sm.current_qualified_name(), None);
+    }
+
+    #[test]
+    fn test_constant_registration_and_lookup() {
+        let mut sm = ScopeManager::new();
+
+        // module Api
+        sm.current_scope_mut().constants.insert("Api".to_string(), "Api".to_string());
+        let api_id = sm.new_scope(ScopeKind::Module { name: "Api".to_string() });
+        sm.enter_scope(api_id);
+
+        // class User (inside Api) — register in parent scope (Api)
+        sm.current_scope_mut().constants.insert("User".to_string(), "Api::User".to_string());
+        let user_id = sm.new_scope(ScopeKind::Class {
+            name: "User".to_string(),
+            superclass: None,
+        });
+        sm.enter_scope(user_id);
+
+        assert_eq!(sm.lookup_constant("User"), Some("Api::User".to_string()));
+        assert_eq!(sm.lookup_constant("Api"), Some("Api".to_string()));
+        assert_eq!(sm.lookup_constant("Unknown"), None);
+    }
+
+    #[test]
+    fn test_constant_lookup_from_method_scope() {
+        let mut sm = ScopeManager::new();
+
+        sm.current_scope_mut().constants.insert("Api".to_string(), "Api".to_string());
+        let api_id = sm.new_scope(ScopeKind::Module { name: "Api".to_string() });
+        sm.enter_scope(api_id);
+
+        sm.current_scope_mut().constants.insert("User".to_string(), "Api::User".to_string());
+        let user_id = sm.new_scope(ScopeKind::Class {
+            name: "User".to_string(),
+            superclass: None,
+        });
+        sm.enter_scope(user_id);
+
+        let method_id = sm.new_scope(ScopeKind::Method {
+            name: "greet".to_string(),
+            receiver_type: None,
+            return_vertex: None,
+        });
+        sm.enter_scope(method_id);
+
+        // Should find constant by traversing parent scopes from method scope
+        assert_eq!(sm.lookup_constant("User"), Some("Api::User".to_string()));
+    }
+
+    #[test]
+    fn test_constant_same_name_different_namespaces() {
+        let mut sm = ScopeManager::new();
+
+        // module Api
+        let api_id = sm.new_scope(ScopeKind::Module { name: "Api".to_string() });
+        sm.enter_scope(api_id);
+        sm.current_scope_mut().constants.insert("User".to_string(), "Api::User".to_string());
+
+        sm.exit_scope();
+
+        // module Admin
+        let admin_id = sm.new_scope(ScopeKind::Module { name: "Admin".to_string() });
+        sm.enter_scope(admin_id);
+        sm.current_scope_mut().constants.insert("User".to_string(), "Admin::User".to_string());
+
+        // Inside Admin scope, User should resolve to Admin::User
+        assert_eq!(sm.lookup_constant("User"), Some("Admin::User".to_string()));
     }
 }

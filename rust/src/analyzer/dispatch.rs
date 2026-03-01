@@ -89,10 +89,12 @@ pub fn dispatch_simple(genv: &mut GlobalEnv, lenv: &mut LocalEnv, node: &Node) -
         };
     }
 
-    // ConstantReadNode: User → Type::Singleton("User")
+    // ConstantReadNode: User → Type::Singleton("User") or Type::Singleton("Api::User")
     if let Some(const_read) = node.as_constant_read_node() {
         let name = String::from_utf8_lossy(const_read.name().as_slice()).to_string();
-        let vtx = genv.new_source(Type::singleton(&name));
+        let resolved_name = genv.scope_manager.lookup_constant(&name)
+            .unwrap_or(name);
+        let vtx = genv.new_source(Type::singleton(&resolved_name));
         return DispatchResult::Vertex(vtx);
     }
 
@@ -890,6 +892,90 @@ Api::User.new.name
         assert!(
             genv.type_errors.is_empty(),
             "Api::User.new.name should not produce type errors: {:?}",
+            genv.type_errors
+        );
+    }
+
+    // Test 23: ConstantReadNode inside module resolves to qualified name
+    #[test]
+    fn test_constant_read_inside_module_resolves_qualified() {
+        let source = r#"
+module Api
+  class User
+    def name
+      "Alice"
+    end
+  end
+
+  class Service
+    def run
+      User.new.name
+    end
+  end
+end
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "User.new inside module Api should resolve to Api::User: {:?}",
+            genv.type_errors
+        );
+    }
+
+    // Test 24: ConstantReadNode in deeply nested modules
+    #[test]
+    fn test_constant_read_deeply_nested() {
+        let source = r#"
+module Api
+  module V1
+    class User
+      def name
+        "Alice"
+      end
+    end
+
+    class Service
+      def run
+        User.new.name
+      end
+    end
+  end
+end
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "User.new inside Api::V1 should resolve to Api::V1::User: {:?}",
+            genv.type_errors
+        );
+    }
+
+    // Test 25: Same constant name in different modules
+    #[test]
+    fn test_constant_read_same_name_different_modules() {
+        let source = r#"
+module Api
+  class User
+    def name; "Api User"; end
+  end
+end
+
+module Admin
+  class User
+    def name; "Admin User"; end
+  end
+
+  class Service
+    def run
+      User.new.name
+    end
+  end
+end
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "User.new inside Admin should resolve to Admin::User: {:?}",
             genv.type_errors
         );
     }
