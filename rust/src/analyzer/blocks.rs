@@ -8,6 +8,7 @@
 use crate::env::{GlobalEnv, LocalEnv, ScopeKind};
 use crate::graph::{ChangeSet, VertexId};
 
+use super::bytes_to_name;
 use super::parameters::{install_optional_parameter, install_required_parameter, install_rest_parameter};
 
 /// Process block node
@@ -68,7 +69,7 @@ fn install_block_parameters_with_vtxs(
         // Required parameters (most common in blocks)
         for node in params.requireds().iter() {
             if let Some(req_param) = node.as_required_parameter_node() {
-                let name = String::from_utf8_lossy(req_param.name().as_slice()).to_string();
+                let name = bytes_to_name(req_param.name().as_slice());
                 let vtx = install_block_parameter(genv, lenv, name);
                 vtxs.push(vtx);
             }
@@ -77,7 +78,7 @@ fn install_block_parameters_with_vtxs(
         // Optional parameters: { |x = 1| ... }
         for node in params.optionals().iter() {
             if let Some(opt_param) = node.as_optional_parameter_node() {
-                let name = String::from_utf8_lossy(opt_param.name().as_slice()).to_string();
+                let name = bytes_to_name(opt_param.name().as_slice());
                 let default_value = opt_param.value();
 
                 if let Some(default_vtx) =
@@ -97,7 +98,7 @@ fn install_block_parameters_with_vtxs(
         if let Some(rest_node) = params.rest() {
             if let Some(rest_param) = rest_node.as_rest_parameter_node() {
                 if let Some(name_id) = rest_param.name() {
-                    let name = String::from_utf8_lossy(name_id.as_slice()).to_string();
+                    let name = bytes_to_name(name_id.as_slice());
                     let vtx = install_rest_parameter(genv, lenv, name);
                     vtxs.push(vtx);
                 }

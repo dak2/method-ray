@@ -9,6 +9,8 @@ use crate::env::{GlobalEnv, LocalEnv};
 use crate::graph::{ChangeSet, VertexId};
 use crate::types::Type;
 
+use super::bytes_to_name;
+
 /// Install a required parameter as a local variable
 ///
 /// Required parameters start with Bot (untyped) type since we don't know
@@ -129,7 +131,7 @@ pub(crate) fn install_parameters(
     // Required parameters: def foo(a, b)
     for node in params_node.requireds().iter() {
         if let Some(req_param) = node.as_required_parameter_node() {
-            let name = String::from_utf8_lossy(req_param.name().as_slice()).to_string();
+            let name = bytes_to_name(req_param.name().as_slice());
             let vtx = install_required_parameter(genv, lenv, name);
             param_vtxs.push(vtx);
         }
@@ -138,7 +140,7 @@ pub(crate) fn install_parameters(
     // Optional parameters: def foo(a = 1, b = "hello")
     for node in params_node.optionals().iter() {
         if let Some(opt_param) = node.as_optional_parameter_node() {
-            let name = String::from_utf8_lossy(opt_param.name().as_slice()).to_string();
+            let name = bytes_to_name(opt_param.name().as_slice());
             let default_value = opt_param.value();
 
             let vtx = if let Some(default_vtx) =
@@ -157,7 +159,7 @@ pub(crate) fn install_parameters(
     if let Some(rest_node) = params_node.rest() {
         if let Some(rest_param) = rest_node.as_rest_parameter_node() {
             if let Some(name_id) = rest_param.name() {
-                let name = String::from_utf8_lossy(name_id.as_slice()).to_string();
+                let name = bytes_to_name(name_id.as_slice());
                 install_rest_parameter(genv, lenv, name);
             }
         }
@@ -168,7 +170,7 @@ pub(crate) fn install_parameters(
     if let Some(kwrest_node) = params_node.keyword_rest() {
         if let Some(kwrest_param) = kwrest_node.as_keyword_rest_parameter_node() {
             if let Some(name_id) = kwrest_param.name() {
-                let name = String::from_utf8_lossy(name_id.as_slice()).to_string();
+                let name = bytes_to_name(name_id.as_slice());
                 install_keyword_rest_parameter(genv, lenv, name);
             }
         }

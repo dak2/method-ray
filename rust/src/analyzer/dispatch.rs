@@ -9,6 +9,7 @@ use crate::source_map::SourceLocation;
 use crate::types::Type;
 use ruby_prism::Node;
 
+use super::bytes_to_name;
 use super::calls::install_method_call;
 use super::variables::{
     install_ivar_read, install_ivar_write, install_local_var_read, install_local_var_write,
@@ -68,7 +69,7 @@ pub enum NeedsChildKind<'a> {
 pub fn dispatch_simple(genv: &mut GlobalEnv, lenv: &mut LocalEnv, node: &Node) -> DispatchResult {
     // Instance variable read: @name
     if let Some(ivar_read) = node.as_instance_variable_read_node() {
-        let ivar_name = String::from_utf8_lossy(ivar_read.name().as_slice()).to_string();
+        let ivar_name = bytes_to_name(ivar_read.name().as_slice());
         return match install_ivar_read(genv, &ivar_name) {
             Some(vtx) => DispatchResult::Vertex(vtx),
             None => DispatchResult::NotHandled,
@@ -82,7 +83,7 @@ pub fn dispatch_simple(genv: &mut GlobalEnv, lenv: &mut LocalEnv, node: &Node) -
 
     // Local variable read: x
     if let Some(read_node) = node.as_local_variable_read_node() {
-        let var_name = String::from_utf8_lossy(read_node.name().as_slice()).to_string();
+        let var_name = bytes_to_name(read_node.name().as_slice());
         return match install_local_var_read(lenv, &var_name) {
             Some(vtx) => DispatchResult::Vertex(vtx),
             None => DispatchResult::NotHandled,
@@ -91,7 +92,7 @@ pub fn dispatch_simple(genv: &mut GlobalEnv, lenv: &mut LocalEnv, node: &Node) -
 
     // ConstantReadNode: User → Type::Singleton("User") or Type::Singleton("Api::User")
     if let Some(const_read) = node.as_constant_read_node() {
-        let name = String::from_utf8_lossy(const_read.name().as_slice()).to_string();
+        let name = bytes_to_name(const_read.name().as_slice());
         let resolved_name = genv.scope_manager.lookup_constant(&name)
             .unwrap_or(name);
         let vtx = genv.new_source(Type::singleton(&resolved_name));
@@ -118,7 +119,7 @@ fn extract_symbol_names(call_node: &ruby_prism::CallNode) -> Vec<String> {
                 .iter()
                 .filter_map(|arg| {
                     arg.as_symbol_node().map(|sym| {
-                        String::from_utf8_lossy(&sym.unescaped()).to_string()
+                        bytes_to_name(sym.unescaped())
                     })
                 })
                 .collect()
@@ -130,7 +131,7 @@ fn extract_symbol_names(call_node: &ruby_prism::CallNode) -> Vec<String> {
 pub fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<NeedsChildKind<'a>> {
     // Instance variable write: @name = value
     if let Some(ivar_write) = node.as_instance_variable_write_node() {
-        let ivar_name = String::from_utf8_lossy(ivar_write.name().as_slice()).to_string();
+        let ivar_name = bytes_to_name(ivar_write.name().as_slice());
         return Some(NeedsChildKind::IvarWrite {
             ivar_name,
             value: ivar_write.value(),
@@ -139,7 +140,7 @@ pub fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<NeedsCh
 
     // Local variable write: x = value
     if let Some(write_node) = node.as_local_variable_write_node() {
-        let var_name = String::from_utf8_lossy(write_node.name().as_slice()).to_string();
+        let var_name = bytes_to_name(write_node.name().as_slice());
         return Some(NeedsChildKind::LocalVarWrite {
             var_name,
             value: write_node.value(),
@@ -148,7 +149,7 @@ pub fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<NeedsCh
 
     // Method call: x.upcase, x.each { |i| ... }, or name (implicit self)
     if let Some(call_node) = node.as_call_node() {
-        let method_name = String::from_utf8_lossy(call_node.name().as_slice()).to_string();
+        let method_name = bytes_to_name(call_node.name().as_slice());
         let block = call_node.block();
         let arguments: Vec<Node<'a>> = call_node
             .arguments()

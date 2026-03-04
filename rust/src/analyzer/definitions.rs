@@ -11,6 +11,7 @@ use crate::graph::{ChangeSet, VertexId};
 use crate::types::Type;
 use ruby_prism::Node;
 
+use super::bytes_to_name;
 use super::install::install_statements;
 use super::parameters::install_parameters;
 
@@ -64,7 +65,7 @@ pub(crate) fn process_def_node(
     source: &str,
     def_node: &ruby_prism::DefNode,
 ) -> Option<VertexId> {
-    let method_name = String::from_utf8_lossy(def_node.name().as_slice()).to_string();
+    let method_name = bytes_to_name(def_node.name().as_slice());
 
     // Check if this is a class method (def self.foo)
     let is_class_method = def_node
@@ -163,7 +164,7 @@ fn extract_module_name(module_node: &ruby_prism::ModuleNode) -> String {
 pub(crate) fn extract_constant_path(node: &Node) -> Option<String> {
     // Simple constant read: `User`
     if let Some(constant_read) = node.as_constant_read_node() {
-        return Some(String::from_utf8_lossy(constant_read.name().as_slice()).to_string());
+        return Some(bytes_to_name(constant_read.name().as_slice()));
     }
 
     // Constant path: `Api::User` or `Api::V1::User`
@@ -171,7 +172,7 @@ pub(crate) fn extract_constant_path(node: &Node) -> Option<String> {
         // name() returns Option<ConstantId>, use as_slice() to get &[u8]
         let name = constant_path
             .name()
-            .map(|id| String::from_utf8_lossy(id.as_slice()).to_string())?;
+            .map(|id| bytes_to_name(id.as_slice()))?;
 
         // Get parent path if exists
         if let Some(parent_node) = constant_path.parent() {
