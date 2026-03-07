@@ -13,8 +13,9 @@ use super::conditionals::{process_case_node, process_if_node, process_unless_nod
 use super::definitions::{process_class_node, process_def_node, process_module_node};
 use super::dispatch::{dispatch_needs_child, dispatch_simple, process_needs_child, DispatchResult};
 use super::literals::install_literal_node;
-use super::parentheses::process_parentheses_node;
+use super::loops::{process_until_node, process_while_node};
 use super::operators::{process_and_node, process_or_node};
+use super::parentheses::process_parentheses_node;
 use super::returns::process_return_node;
 
 /// Build graph from AST (public API wrapper)
@@ -77,6 +78,13 @@ pub(crate) fn install_node(
     }
     if let Some(case_node) = node.as_case_node() {
         return process_case_node(genv, lenv, changes, source, &case_node);
+    }
+
+    if let Some(while_node) = node.as_while_node() {
+        return process_while_node(genv, lenv, changes, source, &while_node);
+    }
+    if let Some(until_node) = node.as_until_node() {
+        return process_until_node(genv, lenv, changes, source, &until_node);
     }
 
     if let Some(paren_node) = node.as_parentheses_node() {

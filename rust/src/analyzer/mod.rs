@@ -6,6 +6,7 @@ mod definitions;
 mod dispatch;
 mod install;
 mod literals;
+mod loops;
 mod operators;
 mod parameters;
 mod parentheses;
