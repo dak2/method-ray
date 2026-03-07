@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-03-07
+
+### Added
+
+- Kernel/Object methods loaded from RBS to reduce false positives ([#39](https://github.com/dak2/method-ray/pull/39))
+- Object/Kernel fallback chain for method resolution ([#40](https://github.com/dak2/method-ray/pull/40))
+- Constant namespace resolution for ConstantReadNode in nested scopes ([#41](https://github.com/dak2/method-ray/pull/41))
+- Cargo test added to CI workflow ([#38](https://github.com/dak2/method-ray/pull/38))
+
+### Changed
+
+- Extract `bytes_to_name` helper to consolidate 17 UTF-8 conversion sites ([#42](https://github.com/dak2/method-ray/pull/42))
+- Refactor MethodCallBox by extracting helper methods ([#43](https://github.com/dak2/method-ray/pull/43))
+
 ## [0.1.6] - 2026-02-23
 
 ### Fixed
@@ -95,6 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - `methodray check` - Static type checking for Ruby files
 
+[0.1.7]: https://github.com/dak2/method-ray/releases/tag/v0.1.7
 [0.1.6]: https://github.com/dak2/method-ray/releases/tag/v0.1.6
 [0.1.5]: https://github.com/dak2/method-ray/releases/tag/v0.1.5
 [0.1.4]: https://github.com/dak2/method-ray/releases/tag/v0.1.4
