@@ -16,6 +16,18 @@ pub trait BoxTrait: Send + Sync {
     fn ret(&self) -> VertexId;
 }
 
+/// Propagate argument types to parameter vertices by adding edges
+/// from each argument vertex to the corresponding parameter vertex.
+fn propagate_arguments(
+    arg_vtxs: &[VertexId],
+    param_vtxs: Option<&[VertexId]>,
+    changes: &mut ChangeSet,
+) {
+    for (arg_vtx, param_vtx) in arg_vtxs.iter().zip(param_vtxs.unwrap_or_default()) {
+        changes.add_edge(*arg_vtx, *param_vtx);
+    }
+}
+
 /// Box representing a method call
 #[allow(dead_code)]
 pub struct MethodCallBox {
@@ -51,6 +63,77 @@ impl MethodCallBox {
             reschedule_count: 0,
         }
     }
+
+    /// Reschedule this box for re-execution if the limit hasn't been reached.
+    /// Handles cases where the receiver has no types yet (e.g., block parameters
+    /// that get typed by a later box). If max reschedules are reached, the box
+    /// is silently dropped (receiver type remains unknown).
+    fn try_reschedule(&mut self, changes: &mut ChangeSet) {
+        if self.reschedule_count < MAX_RESCHEDULE_COUNT {
+            self.reschedule_count += 1;
+            changes.reschedule(self.id);
+        }
+    }
+
+    fn process_recv_type(
+        &self,
+        recv_ty: &Type,
+        genv: &mut GlobalEnv,
+        changes: &mut ChangeSet,
+    ) {
+        if let Some(method_info) = genv.resolve_method(recv_ty, &self.method_name) {
+            if let Some(return_vtx) = method_info.return_vertex {
+                // User-defined method: connect body's return vertex to call site
+                changes.add_edge(return_vtx, self.ret);
+                propagate_arguments(
+                    &self.arg_vtxs,
+                    method_info.param_vertices.as_deref(),
+                    changes,
+                );
+            } else {
+                // Builtin/RBS method: create source with fixed return type
+                let ret_src_id = genv.new_source(method_info.return_type.clone());
+                changes.add_edge(ret_src_id, self.ret);
+            }
+        } else if self.method_name == "new" {
+            self.handle_new_call(recv_ty, genv, changes);
+        } else if !matches!(recv_ty, Type::Singleton { .. }) {
+            // Singleton types with unresolved methods are silently skipped;
+            // these are typically RBS class methods not yet supported.
+            self.report_type_error(recv_ty, genv);
+        }
+    }
+
+    /// Handle `.new` calls: singleton(Foo)#new produces instance(Foo),
+    /// and propagates arguments to the `initialize` method's parameters.
+    fn handle_new_call(
+        &self,
+        recv_ty: &Type,
+        genv: &mut GlobalEnv,
+        changes: &mut ChangeSet,
+    ) {
+        if let Type::Singleton { name } = recv_ty {
+            let instance_type = Type::instance(name.full_name());
+
+            let ret_src = genv.new_source(instance_type.clone());
+            changes.add_edge(ret_src, self.ret);
+
+            let init_params = genv
+                .resolve_method(&instance_type, "initialize")
+                .and_then(|info| info.param_vertices.as_deref());
+            propagate_arguments(&self.arg_vtxs, init_params, changes);
+        } else {
+            self.report_type_error(recv_ty, genv);
+        }
+    }
+
+    fn report_type_error(&self, recv_ty: &Type, genv: &mut GlobalEnv) {
+        genv.record_type_error(
+            recv_ty.clone(),
+            self.method_name.clone(),
+            self.location.clone(),
+        );
+    }
 }
 
 impl BoxTrait for MethodCallBox {
@@ -63,88 +146,17 @@ impl BoxTrait for MethodCallBox {
     }
 
     fn run(&mut self, genv: &mut GlobalEnv, changes: &mut ChangeSet) {
-        // Get receiver type (handles both Vertex and Source)
-        let recv_types: Vec<Type> = if let Some(recv_vertex) = genv.get_vertex(self.recv) {
-            // Vertex case: may have multiple types
-            recv_vertex.types.keys().cloned().collect()
-        } else if let Some(recv_source) = genv.get_source(self.recv) {
-            // Source case: has one fixed type (e.g., literals)
-            vec![recv_source.ty.clone()]
-        } else {
-            // Receiver not found
+        let Some(recv_types) = genv.get_receiver_types(self.recv) else {
             return;
         };
 
-        // If receiver has no types yet, reschedule this box for later
-        // This handles cases like block parameters that are typed later
         if recv_types.is_empty() {
-            if self.reschedule_count < MAX_RESCHEDULE_COUNT {
-                self.reschedule_count += 1;
-                changes.reschedule(self.id);
-            }
-            // If max reschedules reached, just skip (receiver type is unknown)
+            self.try_reschedule(changes);
             return;
         }
 
         for recv_ty in recv_types {
-            // Resolve method
-            if let Some(method_info) = genv.resolve_method(&recv_ty, &self.method_name) {
-                if let Some(return_vtx) = method_info.return_vertex {
-                    // User-defined: edge from body's last expr → call site return
-                    changes.add_edge(return_vtx, self.ret);
-
-                    // Propagate argument types to parameter vertices
-                    if let Some(param_vtxs) = &method_info.param_vertices {
-                        for (i, param_vtx) in param_vtxs.iter().enumerate() {
-                            if let Some(arg_vtx) = self.arg_vtxs.get(i) {
-                                changes.add_edge(*arg_vtx, *param_vtx);
-                            }
-                        }
-                    }
-                } else {
-                    // RBS/builtin: create Source with fixed return type
-                    let ret_src_id = genv.new_source(method_info.return_type.clone());
-                    changes.add_edge(ret_src_id, self.ret);
-                }
-            } else if self.method_name == "new" {
-                if let Type::Singleton { name } = &recv_ty {
-                    // singleton(User)#new → instance(User)
-                    let instance_type = Type::instance(name.full_name());
-                    let ret_src = genv.new_source(instance_type.clone());
-                    changes.add_edge(ret_src, self.ret);
-
-                    // Propagate arguments to initialize parameters
-                    if let Some(init_info) = genv.resolve_method(&instance_type, "initialize") {
-                        if let Some(param_vtxs) = &init_info.param_vertices {
-                            for (i, param_vtx) in param_vtxs.iter().enumerate() {
-                                if let Some(arg_vtx) = self.arg_vtxs.get(i) {
-                                    changes.add_edge(*arg_vtx, *param_vtx);
-                                }
-                            }
-                        }
-                    }
-                    continue;
-                }
-                // Non-singleton .new: record error
-                genv.record_type_error(
-                    recv_ty.clone(),
-                    self.method_name.clone(),
-                    self.location.clone(),
-                );
-            } else if matches!(&recv_ty, Type::Singleton { .. }) {
-                // Skip error for unknown class methods on Singleton types.
-                // User-defined class methods (def self.foo) are resolved by
-                // resolve_method above. Only unresolved methods reach here
-                // (e.g., RBS class methods not yet supported).
-                continue;
-            } else {
-                // Record type error for diagnostic reporting
-                genv.record_type_error(
-                    recv_ty.clone(),
-                    self.method_name.clone(),
-                    self.location.clone(),
-                );
-            }
+            self.process_recv_type(&recv_ty, genv, changes);
         }
     }
 }
@@ -241,12 +253,7 @@ impl BoxTrait for BlockParameterTypeBox {
     }
 
     fn run(&mut self, genv: &mut GlobalEnv, changes: &mut ChangeSet) {
-        // Get receiver types
-        let recv_types: Vec<Type> = if let Some(recv_vertex) = genv.get_vertex(self.recv_vtx) {
-            recv_vertex.types.keys().cloned().collect()
-        } else if let Some(recv_source) = genv.get_source(self.recv_vtx) {
-            vec![recv_source.ty.clone()]
-        } else {
+        let Some(recv_types) = genv.get_receiver_types(self.recv_vtx) else {
             return;
         };
 

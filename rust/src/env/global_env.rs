@@ -71,6 +71,21 @@ impl GlobalEnv {
         self.vertex_manager.get_source(id)
     }
 
+    /// Get the types associated with a vertex ID (handles both Vertex and Source)
+    ///
+    /// Returns `None` if neither a Vertex nor Source exists for this ID.
+    /// Returns `Some(vec![])` if a Vertex exists but has no types yet (e.g., unresolved block parameters).
+    /// Returns `Some(vec![ty])` if a Source exists (always exactly one type).
+    pub fn get_receiver_types(&self, id: VertexId) -> Option<Vec<Type>> {
+        if let Some(vertex) = self.get_vertex(id) {
+            Some(vertex.types.keys().cloned().collect())
+        } else if let Some(source) = self.get_source(id) {
+            Some(vec![source.ty.clone()])
+        } else {
+            None
+        }
+    }
+
     /// Add edge (immediate type propagation)
     pub fn add_edge(&mut self, src: VertexId, dst: VertexId) {
         self.vertex_manager.add_edge(src, dst);
