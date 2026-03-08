@@ -3,6 +3,8 @@
 //! This module provides a unified interface for managing vertices, boxes,
 //! methods, type errors, and scopes during type inference.
 
+use std::collections::HashMap;
+
 use crate::env::box_manager::BoxManager;
 use crate::env::method_registry::{MethodInfo, MethodRegistry};
 use crate::env::scope::{Scope, ScopeId, ScopeKind, ScopeManager};
@@ -184,9 +186,15 @@ impl GlobalEnv {
         method_name: &str,
         return_vertex: VertexId,
         param_vertices: Vec<VertexId>,
+        keyword_param_vertices: Option<HashMap<String, VertexId>>,
     ) {
-        self.method_registry
-            .register_user_method(recv_ty, method_name, return_vertex, param_vertices);
+        self.method_registry.register_user_method(
+            recv_ty,
+            method_name,
+            return_vertex,
+            param_vertices,
+            keyword_param_vertices,
+        );
     }
 
     // ===== Type Errors =====

@@ -6,6 +6,8 @@
 //! - Method definition scope management (def baz ... end)
 //! - Extracting class/module names from AST nodes (including qualified names like Api::User)
 
+use std::collections::HashMap;
+
 use crate::env::{GlobalEnv, LocalEnv};
 use crate::graph::{ChangeSet, VertexId};
 use crate::types::Type;
@@ -78,10 +80,10 @@ pub(crate) fn process_def_node(
     let merge_vtx = genv.scope_manager.current_method_return_vertex();
 
     // Process parameters BEFORE processing body
-    let param_vtxs = if let Some(params_node) = def_node.parameters() {
+    let (param_vtxs, keyword_param_vtxs) = if let Some(params_node) = def_node.parameters() {
         install_parameters(genv, lenv, changes, source, &params_node)
     } else {
-        vec![]
+        (vec![], HashMap::new())
     };
 
     let mut last_vtx = None;
@@ -108,11 +110,13 @@ pub(crate) fn process_def_node(
             } else {
                 Type::instance(&name)
             };
+            let kw_params = (!keyword_param_vtxs.is_empty()).then_some(keyword_param_vtxs);
             genv.register_user_method(
                 recv_type,
                 &method_name,
                 ret_vtx,
                 param_vtxs,
+                kw_params,
             );
         }
     }

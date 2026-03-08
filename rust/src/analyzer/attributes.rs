@@ -39,7 +39,7 @@ pub(crate) fn process_attr_declaration(
 
         // Register getter (attr_reader / attr_accessor)
         if matches!(kind, AttrKind::Reader | AttrKind::Accessor) {
-            genv.register_user_method(recv_ty.clone(), &attr_name, ivar_vtx, vec![]);
+            genv.register_user_method(recv_ty.clone(), &attr_name, ivar_vtx, vec![], None);
         }
 
         // Register setter (attr_writer / attr_accessor)
@@ -51,6 +51,7 @@ pub(crate) fn process_attr_declaration(
                 &format!("{}=", attr_name),
                 ivar_vtx,
                 vec![param_vtx],
+                None,
             );
         }
     }

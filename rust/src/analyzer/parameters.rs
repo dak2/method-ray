@@ -5,6 +5,8 @@
 //! - Creating vertices for parameters
 //! - Registering parameters as local variables in method scope
 
+use std::collections::HashMap;
+
 use crate::env::{GlobalEnv, LocalEnv};
 use crate::graph::{ChangeSet, VertexId};
 use crate::types::Type;
@@ -117,16 +119,18 @@ pub fn install_keyword_rest_parameter(
 
 /// Install method parameters as local variables
 ///
-/// Returns a Vec of VertexId for required and optional parameters (positional),
-/// which can be used for argument-to-parameter type propagation.
+/// Returns a tuple of:
+/// - Vec<VertexId>: positional parameter vertices (required and optional)
+/// - HashMap<String, VertexId>: keyword parameter vertices (name → vertex)
 pub(crate) fn install_parameters(
     genv: &mut GlobalEnv,
     lenv: &mut LocalEnv,
     changes: &mut ChangeSet,
     source: &str,
     params_node: &ruby_prism::ParametersNode,
-) -> Vec<VertexId> {
+) -> (Vec<VertexId>, HashMap<String, VertexId>) {
     let mut param_vtxs = Vec::new();
+    let mut keyword_param_vtxs: HashMap<String, VertexId> = HashMap::new();
 
     // Required parameters: def foo(a, b)
     for node in params_node.requireds().iter() {
@@ -165,8 +169,30 @@ pub(crate) fn install_parameters(
         }
     }
 
+    // Keyword parameters: def foo(name:, age: 0)
+    // Reuses install_required_parameter / install_optional_parameter
+    // since the logic is identical for positional and keyword parameters.
+    for node in params_node.keywords().iter() {
+        if let Some(req_kw) = node.as_required_keyword_parameter_node() {
+            let name = bytes_to_name(req_kw.name().as_slice());
+            let vtx = install_required_parameter(genv, lenv, name.clone());
+            keyword_param_vtxs.insert(name, vtx);
+        } else if let Some(opt_kw) = node.as_optional_keyword_parameter_node() {
+            let name = bytes_to_name(opt_kw.name().as_slice());
+            let default_value = opt_kw.value();
+            let vtx = if let Some(default_vtx) =
+                super::install::install_node(genv, lenv, changes, source, &default_value)
+            {
+                install_optional_parameter(genv, lenv, changes, name.clone(), default_vtx)
+            } else {
+                install_required_parameter(genv, lenv, name.clone())
+            };
+            keyword_param_vtxs.insert(name, vtx);
+        }
+    }
+
     // Keyword rest parameter: def foo(**kwargs)
-    // Not included in param_vtxs (keyword args need special handling)
+    // Not included in keyword_param_vtxs (collects all remaining keywords)
     if let Some(kwrest_node) = params_node.keyword_rest() {
         if let Some(kwrest_param) = kwrest_node.as_keyword_rest_parameter_node() {
             if let Some(name_id) = kwrest_param.name() {
@@ -176,7 +202,7 @@ pub(crate) fn install_parameters(
         }
     }
 
-    param_vtxs
+    (param_vtxs, keyword_param_vtxs)
 }
 
 #[cfg(test)]
@@ -216,5 +242,28 @@ mod tests {
         assert_ne!(vtx_a, vtx_b);
         assert_ne!(vtx_b, vtx_c);
         assert_ne!(vtx_a, vtx_c);
+    }
+
+    #[test]
+    fn test_install_optional_parameter_inherits_default_type() {
+        let mut genv = GlobalEnv::new();
+        let mut lenv = LocalEnv::new();
+        let mut changes = ChangeSet::new();
+
+        // Default value: 0 (Integer)
+        let default_vtx = genv.new_source(Type::integer());
+        let vtx = install_optional_parameter(
+            &mut genv,
+            &mut lenv,
+            &mut changes,
+            "age".to_string(),
+            default_vtx,
+        );
+
+        assert_eq!(lenv.get_var("age"), Some(vtx));
+
+        // Type should propagate from default value
+        let vertex = genv.get_vertex(vtx).unwrap();
+        assert_eq!(vertex.show(), "Integer");
     }
 }

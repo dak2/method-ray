@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::env::GlobalEnv;
 use crate::graph::change_set::ChangeSet;
 use crate::graph::vertex::VertexId;
@@ -28,6 +30,22 @@ fn propagate_arguments(
     }
 }
 
+/// Propagate keyword argument types to keyword parameter vertices by name
+fn propagate_keyword_arguments(
+    kwarg_vtxs: Option<&HashMap<String, VertexId>>,
+    kw_param_vtxs: Option<&HashMap<String, VertexId>>,
+    changes: &mut ChangeSet,
+) {
+    let (Some(args), Some(params)) = (kwarg_vtxs, kw_param_vtxs) else {
+        return;
+    };
+    for (name, arg_vtx) in args {
+        if let Some(&param_vtx) = params.get(name) {
+            changes.add_edge(*arg_vtx, param_vtx);
+        }
+    }
+}
+
 /// Box representing a method call
 #[allow(dead_code)]
 pub struct MethodCallBox {
@@ -36,6 +54,7 @@ pub struct MethodCallBox {
     method_name: String,
     ret: VertexId,
     arg_vtxs: Vec<VertexId>,
+    kwarg_vtxs: Option<HashMap<String, VertexId>>,
     location: Option<SourceLocation>, // Source code location
     /// Number of times this box has been rescheduled
     reschedule_count: u8,
@@ -51,6 +70,7 @@ impl MethodCallBox {
         method_name: String,
         ret: VertexId,
         arg_vtxs: Vec<VertexId>,
+        kwarg_vtxs: Option<HashMap<String, VertexId>>,
         location: Option<SourceLocation>,
     ) -> Self {
         Self {
@@ -59,6 +79,7 @@ impl MethodCallBox {
             method_name,
             ret,
             arg_vtxs,
+            kwarg_vtxs,
             location,
             reschedule_count: 0,
         }
@@ -90,6 +111,11 @@ impl MethodCallBox {
                     method_info.param_vertices.as_deref(),
                     changes,
                 );
+                propagate_keyword_arguments(
+                    self.kwarg_vtxs.as_ref(),
+                    method_info.keyword_param_vertices.as_ref(),
+                    changes,
+                );
             } else {
                 // Builtin/RBS method: create source with fixed return type
                 let ret_src_id = genv.new_source(method_info.return_type.clone());
@@ -118,10 +144,17 @@ impl MethodCallBox {
             let ret_src = genv.new_source(instance_type.clone());
             changes.add_edge(ret_src, self.ret);
 
-            let init_params = genv
-                .resolve_method(&instance_type, "initialize")
-                .and_then(|info| info.param_vertices.as_deref());
-            propagate_arguments(&self.arg_vtxs, init_params, changes);
+            let init_info = genv.resolve_method(&instance_type, "initialize");
+            propagate_arguments(
+                &self.arg_vtxs,
+                init_info.and_then(|info| info.param_vertices.as_deref()),
+                changes,
+            );
+            propagate_keyword_arguments(
+                self.kwarg_vtxs.as_ref(),
+                init_info.and_then(|info| info.keyword_param_vertices.as_ref()),
+                changes,
+            );
         } else {
             self.report_type_error(recv_ty, genv);
         }
@@ -325,6 +358,7 @@ mod tests {
             "upcase".to_string(),
             ret_vtx,
             vec![],
+            None,
             None, // No location in test
         );
 
@@ -357,6 +391,7 @@ mod tests {
             "unknown_method".to_string(),
             ret_vtx,
             vec![],
+            None,
             None, // No location in test
         );
 
@@ -552,7 +587,7 @@ mod tests {
         let body_src = genv.new_source(Type::string());
 
         // Register user-defined method User#name with return_vertex
-        genv.register_user_method(Type::instance("User"), "name", body_src, vec![]);
+        genv.register_user_method(Type::instance("User"), "name", body_src, vec![], None);
 
         // Simulate: user.name (receiver has type User)
         let recv_vtx = genv.new_vertex();
@@ -567,6 +602,7 @@ mod tests {
             "name".to_string(),
             ret_vtx,
             vec![],
+            None,
             None,
         );
         genv.register_box(box_id, Box::new(call_box));
@@ -598,6 +634,7 @@ mod tests {
             inner_ret_vtx,
             vec![],
             None,
+            None,
         );
         genv.register_box(inner_box_id, Box::new(inner_call));
 
@@ -607,6 +644,7 @@ mod tests {
             "format",
             inner_ret_vtx,
             vec![param_vtx],
+            None,
         );
 
         // 5. Simulate call: Formatter.new.format(42)
@@ -625,6 +663,7 @@ mod tests {
             call_ret_vtx,
             vec![arg_vtx],
             None,
+            None,
         );
         genv.register_box(call_box_id, Box::new(call_box));
 
@@ -636,5 +675,95 @@ mod tests {
 
         // Return type should be String (Integer#to_s -> String)
         assert_eq!(genv.get_vertex(call_ret_vtx).unwrap().show(), "String");
+    }
+
+    #[test]
+    fn test_keyword_arg_propagation() {
+        let mut genv = GlobalEnv::new();
+
+        // Simulate: def greet(name:); name; end
+        let param_vtx = genv.new_vertex();
+        let mut kw_params = HashMap::new();
+        kw_params.insert("name".to_string(), param_vtx);
+
+        genv.register_user_method(
+            Type::instance("Greeter"),
+            "greet",
+            param_vtx, // return vertex = param (returns name)
+            vec![],
+            Some(kw_params),
+        );
+
+        // Simulate call: Greeter.new.greet(name: "Alice")
+        let recv_vtx = genv.new_vertex();
+        let recv_src = genv.new_source(Type::instance("Greeter"));
+        genv.add_edge(recv_src, recv_vtx);
+
+        let arg_vtx = genv.new_source(Type::string());
+        let mut kwarg_vtxs = HashMap::new();
+        kwarg_vtxs.insert("name".to_string(), arg_vtx);
+
+        let ret_vtx = genv.new_vertex();
+        let box_id = genv.alloc_box_id();
+        let call_box = MethodCallBox::new(
+            box_id,
+            recv_vtx,
+            "greet".to_string(),
+            ret_vtx,
+            vec![],
+            Some(kwarg_vtxs),
+            None,
+        );
+        genv.register_box(box_id, Box::new(call_box));
+
+        genv.run_all();
+
+        // param_vtx should have String type (propagated from keyword argument)
+        assert_eq!(genv.get_vertex(param_vtx).unwrap().show(), "String");
+        assert_eq!(genv.get_vertex(ret_vtx).unwrap().show(), "String");
+    }
+
+    #[test]
+    fn test_keyword_arg_name_mismatch_skipped() {
+        let mut genv = GlobalEnv::new();
+
+        let param_vtx = genv.new_vertex();
+        let mut kw_params = HashMap::new();
+        kw_params.insert("name".to_string(), param_vtx);
+
+        genv.register_user_method(
+            Type::instance("Greeter"),
+            "greet",
+            param_vtx,
+            vec![],
+            Some(kw_params),
+        );
+
+        let recv_vtx = genv.new_vertex();
+        let recv_src = genv.new_source(Type::instance("Greeter"));
+        genv.add_edge(recv_src, recv_vtx);
+
+        // Wrong keyword name: "title" instead of "name"
+        let arg_vtx = genv.new_source(Type::string());
+        let mut kwarg_vtxs = HashMap::new();
+        kwarg_vtxs.insert("title".to_string(), arg_vtx);
+
+        let ret_vtx = genv.new_vertex();
+        let box_id = genv.alloc_box_id();
+        let call_box = MethodCallBox::new(
+            box_id,
+            recv_vtx,
+            "greet".to_string(),
+            ret_vtx,
+            vec![],
+            Some(kwarg_vtxs),
+            None,
+        );
+        genv.register_box(box_id, Box::new(call_box));
+
+        genv.run_all();
+
+        // param_vtx should remain untyped (name mismatch → no propagation)
+        assert_eq!(genv.get_vertex(param_vtx).unwrap().show(), "untyped");
     }
 }

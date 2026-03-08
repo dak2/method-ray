@@ -1,9 +1,10 @@
 //! Method registration and resolution
 
+use std::collections::HashMap;
+
 use crate::graph::VertexId;
 use crate::types::Type;
 use smallvec::SmallVec;
-use std::collections::HashMap;
 
 const OBJECT_CLASS: &str = "Object";
 const KERNEL_MODULE: &str = "Kernel";
@@ -15,6 +16,7 @@ pub struct MethodInfo {
     pub block_param_types: Option<Vec<Type>>,
     pub return_vertex: Option<VertexId>,
     pub param_vertices: Option<Vec<VertexId>>,
+    pub keyword_param_vertices: Option<HashMap<String, VertexId>>,
 }
 
 /// Registry for method definitions
@@ -51,6 +53,7 @@ impl MethodRegistry {
                 block_param_types,
                 return_vertex: None,
                 param_vertices: None,
+                keyword_param_vertices: None,
             },
         );
     }
@@ -62,6 +65,7 @@ impl MethodRegistry {
         method_name: &str,
         return_vertex: VertexId,
         param_vertices: Vec<VertexId>,
+        keyword_param_vertices: Option<HashMap<String, VertexId>>,
     ) {
         self.methods.insert(
             (recv_ty, method_name.to_string()),
@@ -70,6 +74,7 @@ impl MethodRegistry {
                 block_param_types: None,
                 return_vertex: Some(return_vertex),
                 param_vertices: Some(param_vertices),
+                keyword_param_vertices,
             },
         );
     }
@@ -134,7 +139,7 @@ mod tests {
     fn test_register_user_method_and_resolve() {
         let mut registry = MethodRegistry::new();
         let return_vtx = VertexId(42);
-        registry.register_user_method(Type::instance("User"), "name", return_vtx, vec![]);
+        registry.register_user_method(Type::instance("User"), "name", return_vtx, vec![], None);
 
         let info = registry.resolve(&Type::instance("User"), "name").unwrap();
         assert_eq!(info.return_vertex, Some(VertexId(42)));
@@ -151,6 +156,7 @@ mod tests {
             "add",
             return_vtx,
             param_vtxs,
+            None,
         );
 
         let info = registry.resolve(&Type::instance("Calc"), "add").unwrap();
