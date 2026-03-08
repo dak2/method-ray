@@ -3,6 +3,7 @@ mod blocks;
 mod calls;
 mod conditionals;
 mod definitions;
+mod exceptions;
 mod dispatch;
 mod install;
 mod literals;
