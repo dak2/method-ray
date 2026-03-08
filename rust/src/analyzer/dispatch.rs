@@ -3,6 +3,8 @@
 //! This module handles the pattern matching of Ruby AST nodes
 //! and dispatches them to specialized handlers.
 
+use std::collections::HashMap;
+
 use crate::env::{GlobalEnv, LocalEnv};
 use crate::graph::{BlockParameterTypeBox, ChangeSet, VertexId};
 use crate::source_map::SourceLocation;
@@ -294,10 +296,31 @@ fn process_method_call_common<'a>(
         return Some(super::operators::process_not_operator(genv));
     }
 
-    let arg_vtxs: Vec<VertexId> = arguments
-        .iter()
-        .filter_map(|arg| super::install::install_node(genv, lenv, changes, source, arg))
-        .collect();
+    // Separate positional arguments and keyword arguments
+    let mut positional_arg_vtxs: Vec<VertexId> = Vec::new();
+    let mut keyword_arg_vtxs: HashMap<String, VertexId> = HashMap::new();
+
+    for arg in &arguments {
+        if let Some(kw_hash) = arg.as_keyword_hash_node() {
+            for element in kw_hash.elements().iter() {
+                let assoc = match element.as_assoc_node() {
+                    Some(a) => a,
+                    None => continue,
+                };
+                let name = match assoc.key().as_symbol_node() {
+                    Some(sym) => bytes_to_name(sym.unescaped()),
+                    None => continue,
+                };
+                if let Some(vtx) =
+                    super::install::install_node(genv, lenv, changes, source, &assoc.value())
+                {
+                    keyword_arg_vtxs.insert(name, vtx);
+                }
+            }
+        } else if let Some(vtx) = super::install::install_node(genv, lenv, changes, source, arg) {
+            positional_arg_vtxs.push(vtx);
+        }
+    }
 
     if let Some(block_node) = block {
         if let Some(block) = block_node.as_block_node() {
@@ -318,8 +341,19 @@ fn process_method_call_common<'a>(
         }
     }
 
+    let kwarg_vtxs = if keyword_arg_vtxs.is_empty() {
+        None
+    } else {
+        Some(keyword_arg_vtxs)
+    };
+
     Some(finish_method_call(
-        genv, recv_vtx, method_name, arg_vtxs, location,
+        genv,
+        recv_vtx,
+        method_name,
+        positional_arg_vtxs,
+        kwarg_vtxs,
+        location,
     ))
 }
 
@@ -329,9 +363,10 @@ fn finish_method_call(
     recv_vtx: VertexId,
     method_name: String,
     arg_vtxs: Vec<VertexId>,
+    kwarg_vtxs: Option<HashMap<String, VertexId>>,
     location: SourceLocation,
 ) -> VertexId {
-    install_method_call(genv, recv_vtx, method_name, arg_vtxs, Some(location))
+    install_method_call(genv, recv_vtx, method_name, arg_vtxs, kwarg_vtxs, Some(location))
 }
 
 #[cfg(test)]
@@ -983,5 +1018,106 @@ end
             "User.new inside Admin should resolve to Admin::User: {:?}",
             genv.type_errors
         );
+    }
+
+    // === Keyword argument tests ===
+
+    // Test 26: Required keyword argument type propagation
+    #[test]
+    fn test_keyword_arg_required_propagation() {
+        let source = r#"
+class Greeter
+  def greet(name:)
+    name
+  end
+end
+
+Greeter.new.greet(name: "Alice")
+"#;
+        let genv = analyze(source);
+
+        let info = genv
+            .resolve_method(&Type::instance("Greeter"), "greet")
+            .expect("Greeter#greet should be registered");
+        let ret_vtx = info.return_vertex.unwrap();
+        assert_eq!(get_type_show(&genv, ret_vtx), "String");
+    }
+
+    // Test 27: Optional keyword argument with default type
+    #[test]
+    fn test_keyword_arg_optional_default_type() {
+        let source = r#"
+class Counter
+  def count(step: 1)
+    step
+  end
+end
+"#;
+        let genv = analyze(source);
+
+        let info = genv
+            .resolve_method(&Type::instance("Counter"), "count")
+            .expect("Counter#count should be registered");
+        let ret_vtx = info.return_vertex.unwrap();
+        // step has Integer type from default value
+        assert_eq!(get_type_show(&genv, ret_vtx), "Integer");
+    }
+
+    // Test 28: Positional and keyword arguments mixed
+    #[test]
+    fn test_positional_and_keyword_mixed() {
+        let source = r#"
+class User
+  def initialize(id, name:)
+    @id = id
+    @name = name
+  end
+end
+
+User.new(1, name: "Alice")
+"#;
+        let genv = analyze(source);
+        assert!(genv.type_errors.is_empty());
+    }
+
+    // Test 29: Keyword argument via .new propagation to initialize
+    #[test]
+    fn test_keyword_arg_via_new_to_initialize() {
+        let source = r#"
+class Config
+  def initialize(debug:)
+    @debug = debug
+  end
+
+  def debug?
+    @debug
+  end
+end
+
+Config.new(debug: true)
+"#;
+        let genv = analyze(source);
+        assert!(genv.type_errors.is_empty());
+    }
+
+    // Test 30: Multiple keyword arguments
+    #[test]
+    fn test_multiple_keyword_args() {
+        let source = r#"
+class User
+  def profile(name:, age:)
+    name
+  end
+end
+
+User.new.profile(name: "Alice", age: 30)
+"#;
+        let genv = analyze(source);
+
+        let info = genv
+            .resolve_method(&Type::instance("User"), "profile")
+            .expect("User#profile should be registered");
+        let ret_vtx = info.return_vertex.unwrap();
+        assert_eq!(get_type_show(&genv, ret_vtx), "String");
     }
 }

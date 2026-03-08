@@ -5,6 +5,8 @@
 //! - Managing return value vertices
 //! - Attaching source location for error reporting
 
+use std::collections::HashMap;
+
 use crate::env::GlobalEnv;
 use crate::graph::{MethodCallBox, VertexId};
 use crate::source_map::SourceLocation;
@@ -15,6 +17,7 @@ pub fn install_method_call(
     recv_vtx: VertexId,
     method_name: String,
     arg_vtxs: Vec<VertexId>,
+    kwarg_vtxs: Option<HashMap<String, VertexId>>,
     location: Option<SourceLocation>,
 ) -> VertexId {
     // Create Vertex for return value
@@ -22,7 +25,8 @@ pub fn install_method_call(
 
     // Create MethodCallBox with location and argument vertices
     let box_id = genv.alloc_box_id();
-    let call_box = MethodCallBox::new(box_id, recv_vtx, method_name, ret_vtx, arg_vtxs, location);
+    let call_box =
+        MethodCallBox::new(box_id, recv_vtx, method_name, ret_vtx, arg_vtxs, kwarg_vtxs, location);
     genv.register_box(box_id, Box::new(call_box));
 
     ret_vtx
@@ -39,7 +43,7 @@ mod tests {
 
         let recv_vtx = genv.new_source(Type::string());
         let ret_vtx =
-            install_method_call(&mut genv, recv_vtx, "upcase".to_string(), vec![], None);
+            install_method_call(&mut genv, recv_vtx, "upcase".to_string(), vec![], None, None);
 
         // Return vertex should exist
         assert!(genv.get_vertex(ret_vtx).is_some());
@@ -51,7 +55,7 @@ mod tests {
 
         let recv_vtx = genv.new_source(Type::string());
         let _ret_vtx =
-            install_method_call(&mut genv, recv_vtx, "upcase".to_string(), vec![], None);
+            install_method_call(&mut genv, recv_vtx, "upcase".to_string(), vec![], None, None);
 
         // Box should be added
         assert_eq!(genv.box_count(), 1);
