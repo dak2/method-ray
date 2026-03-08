@@ -1,3 +1,4 @@
+mod assignments;
 mod attributes;
 mod blocks;
 mod calls;
