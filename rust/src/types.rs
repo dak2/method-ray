@@ -125,7 +125,6 @@ impl From<String> for QualifiedName {
 
 /// Type system for graph-based type inference
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-#[allow(dead_code)]
 pub enum Type {
     /// Instance type: String, Integer, Api::User, etc.
     Instance { name: QualifiedName },

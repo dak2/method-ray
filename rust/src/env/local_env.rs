@@ -6,7 +6,12 @@ pub struct LocalEnv {
     locals: HashMap<String, VertexId>,
 }
 
-#[allow(dead_code)]
+impl Default for LocalEnv {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LocalEnv {
     pub fn new() -> Self {
         Self {
@@ -39,6 +44,12 @@ impl LocalEnv {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_local_env_default() {
+        let lenv = LocalEnv::default();
+        assert_eq!(lenv.get_var("x"), None);
+    }
 
     #[test]
     fn test_local_env() {

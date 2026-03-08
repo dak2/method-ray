@@ -37,7 +37,6 @@ impl SerializableMethodInfo {
     }
 }
 
-#[allow(dead_code)]
 impl RbsCache {
     /// Get user cache file path (in ~/.cache/methodray/)
     pub fn cache_path() -> Result<PathBuf> {

@@ -155,8 +155,7 @@ pub fn register_rbs_methods(genv: &mut GlobalEnv, ruby: &Ruby) -> Result<usize, 
             cache.to_method_infos()
         } else {
             eprintln!("Cache invalid, reloading from RBS...");
-            let methods = load_and_cache_rbs_methods(ruby, methodray_version, &rbs_version)?;
-            methods
+            load_and_cache_rbs_methods(ruby, methodray_version, &rbs_version)?
         }
     } else {
         eprintln!("No cache found, loading from RBS...");

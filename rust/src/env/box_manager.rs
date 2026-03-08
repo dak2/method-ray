@@ -6,7 +6,6 @@ use crate::graph::{BoxId, BoxTrait};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Manages boxes and their execution queue
-#[allow(dead_code)]
 pub struct BoxManager {
     /// All registered boxes
     pub boxes: HashMap<BoxId, Box<dyn BoxTrait>>,
@@ -24,7 +23,6 @@ impl Default for BoxManager {
     }
 }
 
-#[allow(dead_code)]
 impl BoxManager {
     /// Create a new empty box manager
     pub fn new() -> Self {
@@ -37,8 +35,8 @@ impl BoxManager {
     }
 
     /// Get a box by ID
-    pub fn get(&self, id: BoxId) -> Option<&Box<dyn BoxTrait>> {
-        self.boxes.get(&id)
+    pub fn get(&self, id: BoxId) -> Option<&dyn BoxTrait> {
+        self.boxes.get(&id).map(|b| b.as_ref())
     }
 
     /// Remove a box and return it (for temporary mutation)

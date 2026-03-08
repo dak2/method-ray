@@ -1,7 +1,7 @@
 //! CLI command implementations
 
 use anyhow::Result;
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::cache::RbsCache;
 use crate::checker::FileChecker;
@@ -9,7 +9,7 @@ use crate::diagnostics;
 
 /// Check a single Ruby file for type errors
 /// Returns Ok(true) if no errors, Ok(false) if errors found
-pub fn check_single_file(file_path: &PathBuf, verbose: bool) -> Result<bool> {
+pub fn check_single_file(file_path: &Path, verbose: bool) -> Result<bool> {
     let checker = FileChecker::new()?;
     let diagnostics = checker.check_file(file_path)?;
 
@@ -38,7 +38,7 @@ pub fn check_project(_verbose: bool) -> Result<()> {
 }
 
 /// Watch a file for changes and re-check on modifications
-pub fn watch_file(file_path: &PathBuf) -> Result<()> {
+pub fn watch_file(file_path: &Path) -> Result<()> {
     use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
     use std::sync::mpsc::channel;
     use std::time::Duration;

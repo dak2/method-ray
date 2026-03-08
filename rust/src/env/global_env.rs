@@ -39,7 +39,6 @@ pub struct GlobalEnv {
     pub scope_manager: ScopeManager,
 }
 
-#[allow(dead_code)]
 impl GlobalEnv {
     pub fn new() -> Self {
         Self {

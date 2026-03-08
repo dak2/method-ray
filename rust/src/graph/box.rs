@@ -11,7 +11,6 @@ use crate::types::Type;
 pub struct BoxId(pub usize);
 
 /// Box trait: represents constraints such as method calls
-#[allow(dead_code)]
 pub trait BoxTrait: Send + Sync {
     fn id(&self) -> BoxId;
     fn run(&mut self, genv: &mut GlobalEnv, changes: &mut ChangeSet);
@@ -47,7 +46,6 @@ fn propagate_keyword_arguments(
 }
 
 /// Box representing a method call
-#[allow(dead_code)]
 pub struct MethodCallBox {
     id: BoxId,
     recv: VertexId,
@@ -199,7 +197,6 @@ impl BoxTrait for MethodCallBox {
 /// When a method with a block is called (e.g., `str.each_char { |c| ... }`),
 /// this box resolves the block parameter types from the method's RBS definition
 /// and propagates them to the block parameter vertices.
-#[allow(dead_code)]
 pub struct BlockParameterTypeBox {
     id: BoxId,
     /// Receiver vertex of the method call

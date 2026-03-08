@@ -237,7 +237,8 @@ pub(crate) fn process_needs_child(
         } => {
             let recv_vtx = super::install::install_node(genv, lenv, changes, source, &receiver)?;
             process_method_call_common(
-                genv, lenv, changes, source, recv_vtx, method_name, location, block, arguments,
+                genv, lenv, changes, source,
+                MethodCallContext { recv_vtx, method_name, location, block, arguments },
             )
         }
         NeedsChildKind::ImplicitSelfCall {
@@ -253,7 +254,8 @@ pub(crate) fn process_needs_child(
                 genv.new_source(Type::instance("Object"))
             };
             process_method_call_common(
-                genv, lenv, changes, source, recv_vtx, method_name, location, block, arguments,
+                genv, lenv, changes, source,
+                MethodCallContext { recv_vtx, method_name, location, block, arguments },
             )
         }
         NeedsChildKind::AttrDeclaration { kind, attr_names } => {
@@ -279,6 +281,15 @@ fn finish_local_var_write(
     install_local_var_write(genv, lenv, changes, var_name, value_vtx)
 }
 
+/// Bundled parameters for method call processing
+struct MethodCallContext<'a> {
+    recv_vtx: VertexId,
+    method_name: String,
+    location: SourceLocation,
+    block: Option<Node<'a>>,
+    arguments: Vec<Node<'a>>,
+}
+
 /// MethodCall / ImplicitSelfCall common processing:
 /// Handles argument processing, block processing, and MethodCallBox creation after recv_vtx is obtained
 fn process_method_call_common<'a>(
@@ -286,12 +297,15 @@ fn process_method_call_common<'a>(
     lenv: &mut LocalEnv,
     changes: &mut ChangeSet,
     source: &str,
-    recv_vtx: VertexId,
-    method_name: String,
-    location: SourceLocation,
-    block: Option<Node<'a>>,
-    arguments: Vec<Node<'a>>,
+    ctx: MethodCallContext<'a>,
 ) -> Option<VertexId> {
+    let MethodCallContext {
+        recv_vtx,
+        method_name,
+        location,
+        block,
+        arguments,
+    } = ctx;
     if method_name == "!" {
         return Some(super::operators::process_not_operator(genv));
     }

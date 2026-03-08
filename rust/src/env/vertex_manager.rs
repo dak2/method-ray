@@ -17,7 +17,6 @@ pub struct VertexManager {
     next_vertex_id: usize,
 }
 
-#[allow(dead_code)]
 impl VertexManager {
     /// Create a new empty vertex manager
     pub fn new() -> Self {
