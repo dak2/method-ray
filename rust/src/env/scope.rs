@@ -7,7 +7,6 @@ pub struct ScopeId(pub usize);
 
 /// Scope kind
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub enum ScopeKind {
     TopLevel,
     Class {
@@ -27,7 +26,6 @@ pub enum ScopeKind {
 
 /// Scope information
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct Scope {
     pub id: ScopeId,
     pub kind: ScopeKind,
@@ -46,7 +44,6 @@ pub struct Scope {
     pub constants: HashMap<String, String>,
 }
 
-#[allow(dead_code)]
 impl Scope {
     pub fn new(id: ScopeId, kind: ScopeKind, parent: Option<ScopeId>) -> Self {
         Self {
@@ -89,7 +86,12 @@ pub struct ScopeManager {
     current_scope: ScopeId,
 }
 
-#[allow(dead_code)]
+impl Default for ScopeManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ScopeManager {
     pub fn new() -> Self {
         let top_level = Scope::new(ScopeId(0), ScopeKind::TopLevel, None);
@@ -277,6 +279,13 @@ impl ScopeManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_scope_manager_default() {
+        let sm = ScopeManager::default();
+        assert_eq!(sm.current_scope().id, ScopeId(0));
+        assert!(matches!(sm.current_scope().kind, ScopeKind::TopLevel));
+    }
 
     #[test]
     fn test_scope_manager_creation() {

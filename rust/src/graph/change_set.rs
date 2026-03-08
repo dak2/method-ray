@@ -10,6 +10,12 @@ pub struct ChangeSet {
     reschedule_boxes: Vec<BoxId>,
 }
 
+impl Default for ChangeSet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ChangeSet {
     pub fn new() -> Self {
         Self {
@@ -74,6 +80,14 @@ pub enum EdgeUpdate {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_change_set_default() {
+        let mut cs = ChangeSet::default();
+        cs.add_edge(VertexId(1), VertexId(2));
+        let updates = cs.reinstall();
+        assert_eq!(updates.len(), 1);
+    }
 
     #[test]
     fn test_change_set_add() {

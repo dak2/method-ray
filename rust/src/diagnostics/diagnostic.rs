@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 /// Diagnostic severity level (LSP compatible)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
 pub enum DiagnosticLevel {
     Error,
     Warning,
@@ -28,7 +27,6 @@ pub struct Location {
 
 /// Type checking diagnostic
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct Diagnostic {
     pub location: Location,
     pub level: DiagnosticLevel,
@@ -36,7 +34,6 @@ pub struct Diagnostic {
     pub code: Option<String>, // e.g., "E001"
 }
 
-#[allow(dead_code)]
 impl Diagnostic {
     /// Create an error diagnostic
     pub fn error(location: Location, message: String) -> Self {

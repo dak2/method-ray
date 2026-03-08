@@ -8,7 +8,6 @@ use std::path::Path;
 /// ```text
 /// app/models/user.rb:10:5: error: undefined method `upcase` for Integer
 /// ```
-#[allow(dead_code)]
 pub fn format_diagnostics(diagnostics: &[Diagnostic]) -> String {
     diagnostics
         .iter()
