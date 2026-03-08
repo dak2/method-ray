@@ -126,4 +126,58 @@ class OperatorTest < Minitest::Test
 
     assert_check_error(source, method_name: 'even?', receiver_type: 'String')
   end
+
+  # ============================================
+  # Not operator (!)
+  # ============================================
+
+  def test_not_operator_type
+    source = <<~RUBY
+      x = !true
+    RUBY
+
+    types = infer(source)
+    type_str = types["x"]
+    assert_includes type_str, "TrueClass"
+    assert_includes type_str, "FalseClass"
+  end
+
+  def test_not_operator_method_call_no_error
+    source = <<~RUBY
+      class Foo
+        def bar
+          !true
+        end
+
+        def baz
+          self.bar.to_s
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_not_operator_receiver_type_error
+    source = <<~RUBY
+      class Foo
+        def bar
+          !(1.upcase)
+        end
+      end
+    RUBY
+
+    assert_check_error(source, method_name: 'upcase', receiver_type: 'Integer')
+  end
+
+  def test_double_not_operator_type
+    source = <<~RUBY
+      x = !!true
+    RUBY
+
+    types = infer(source)
+    type_str = types["x"]
+    assert_includes type_str, "TrueClass"
+    assert_includes type_str, "FalseClass"
+  end
 end

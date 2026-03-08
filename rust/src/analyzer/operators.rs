@@ -1,16 +1,38 @@
-//! Operators - logical operator type inference (&&, ||)
+//! Operators - logical operator type inference (&&, ||, !)
 
 use crate::env::{GlobalEnv, LocalEnv};
 use crate::graph::{ChangeSet, VertexId};
-use ruby_prism::{AndNode, OrNode};
+use crate::types::Type;
+use ruby_prism::{AndNode, Node, OrNode};
 
 use super::install::install_node;
 
+/// Merge two branch nodes into a union type vertex.
+fn process_binary_logical_op<'a>(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    left: Node<'a>,
+    right: Node<'a>,
+) -> Option<VertexId> {
+    let result_vtx = genv.new_vertex();
+
+    if let Some(vtx) = install_node(genv, lenv, changes, source, &left) {
+        genv.add_edge(vtx, result_vtx);
+    }
+
+    if let Some(vtx) = install_node(genv, lenv, changes, source, &right) {
+        genv.add_edge(vtx, result_vtx);
+    }
+
+    Some(result_vtx)
+}
+
 /// Process AndNode (a && b): Union(type(a), type(b))
 ///
-/// Short-circuit semantics: if `a` is falsy, returns `a`; otherwise returns `b`.
-/// Static approximation: we cannot determine truthiness at compile time,
-/// so we conservatively produce Union(type(a), type(b)).
+/// Runtime: if `a` is falsy, returns `a`; otherwise returns `b`.
+/// Static: conservatively produce Union(type(a), type(b)).
 pub(crate) fn process_and_node(
     genv: &mut GlobalEnv,
     lenv: &mut LocalEnv,
@@ -18,25 +40,13 @@ pub(crate) fn process_and_node(
     source: &str,
     and_node: &AndNode,
 ) -> Option<VertexId> {
-    let result_vtx = genv.new_vertex();
-
-    let left_vtx = install_node(genv, lenv, changes, source, &and_node.left());
-    if let Some(vtx) = left_vtx {
-        genv.add_edge(vtx, result_vtx);
-    }
-
-    let right_vtx = install_node(genv, lenv, changes, source, &and_node.right());
-    if let Some(vtx) = right_vtx {
-        genv.add_edge(vtx, result_vtx);
-    }
-
-    Some(result_vtx)
+    process_binary_logical_op(genv, lenv, changes, source, and_node.left(), and_node.right())
 }
 
 /// Process OrNode (a || b): Union(type(a), type(b))
 ///
-/// Short-circuit semantics: if `a` is truthy, returns `a`; otherwise returns `b`.
-/// Static approximation: identical to AndNode — Union of both sides.
+/// Runtime: if `a` is truthy, returns `a`; otherwise returns `b`.
+/// Static: conservatively produce Union(type(a), type(b)).
 pub(crate) fn process_or_node(
     genv: &mut GlobalEnv,
     lenv: &mut LocalEnv,
@@ -44,19 +54,28 @@ pub(crate) fn process_or_node(
     source: &str,
     or_node: &OrNode,
 ) -> Option<VertexId> {
+    process_binary_logical_op(genv, lenv, changes, source, or_node.left(), or_node.right())
+}
+
+/// Process not operator (!expr): TrueClass | FalseClass
+///
+/// In ruby-prism, `!expr` is represented as a CallNode with method name "!".
+/// Static approximation: we cannot determine the receiver's truthiness at
+/// compile time, so conservatively return TrueClass | FalseClass for any `!` call.
+/// In practice, `!nil` and `!false` are always true, but we do not track that here.
+///
+/// Receiver side effects are already analyzed by the caller (process_needs_child).
+///
+/// TODO: Ruby allows overriding `BasicObject#!`. Currently we always return
+/// TrueClass | FalseClass, ignoring user-defined `!` methods. If needed, look up
+/// the receiver's RBS definition and use its return type instead.
+pub(crate) fn process_not_operator(genv: &mut GlobalEnv) -> VertexId {
     let result_vtx = genv.new_vertex();
-
-    let left_vtx = install_node(genv, lenv, changes, source, &or_node.left());
-    if let Some(vtx) = left_vtx {
-        genv.add_edge(vtx, result_vtx);
-    }
-
-    let right_vtx = install_node(genv, lenv, changes, source, &or_node.right());
-    if let Some(vtx) = right_vtx {
-        genv.add_edge(vtx, result_vtx);
-    }
-
-    Some(result_vtx)
+    let true_vtx = genv.new_source(Type::instance("TrueClass"));
+    let false_vtx = genv.new_source(Type::instance("FalseClass"));
+    genv.add_edge(true_vtx, result_vtx);
+    genv.add_edge(false_vtx, result_vtx);
+    result_vtx
 }
 
 #[cfg(test)]
@@ -189,4 +208,77 @@ end
         assert!(type_str.contains("Symbol"), "should contain Symbol: {}", type_str);
     }
 
+    // ============================================
+    // Not operator (!) tests
+    // ============================================
+
+    #[test]
+    fn test_not_operator_returns_boolean_union() {
+        let source = r#"
+class Foo
+  def bar
+    !true
+  end
+end
+"#;
+        let genv = analyze(source);
+        let info = genv
+            .resolve_method(&Type::instance("Foo"), "bar")
+            .expect("bar should be registered");
+        let ty = get_type_show(&genv, info.return_vertex.unwrap());
+        assert!(ty.contains("TrueClass"), "expected TrueClass in {}", ty);
+        assert!(ty.contains("FalseClass"), "expected FalseClass in {}", ty);
+    }
+
+    #[test]
+    fn test_not_operator_receiver_side_effects_analyzed() {
+        let source = r#"
+class Foo
+  def bar
+    !(1.upcase)
+  end
+end
+"#;
+        let genv = analyze(source);
+        assert!(
+            !genv.type_errors.is_empty(),
+            "expected type error for Integer#upcase"
+        );
+    }
+
+    #[test]
+    fn test_double_not_operator_union() {
+        let source = r#"
+class Foo
+  def bar
+    !!true
+  end
+end
+"#;
+        let genv = analyze(source);
+        let info = genv
+            .resolve_method(&Type::instance("Foo"), "bar")
+            .expect("bar should be registered");
+        let ty = get_type_show(&genv, info.return_vertex.unwrap());
+        assert!(ty.contains("TrueClass"), "expected TrueClass in {}", ty);
+        assert!(ty.contains("FalseClass"), "expected FalseClass in {}", ty);
+    }
+
+    #[test]
+    fn test_not_nil_returns_boolean() {
+        let source = r#"
+class Foo
+  def bar
+    !nil
+  end
+end
+"#;
+        let genv = analyze(source);
+        let info = genv
+            .resolve_method(&Type::instance("Foo"), "bar")
+            .expect("bar should be registered");
+        let ty = get_type_show(&genv, info.return_vertex.unwrap());
+        assert!(ty.contains("TrueClass"), "expected TrueClass in {}", ty);
+        assert!(ty.contains("FalseClass"), "expected FalseClass in {}", ty);
+    }
 }
