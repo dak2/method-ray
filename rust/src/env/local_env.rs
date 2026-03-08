@@ -24,6 +24,12 @@ impl LocalEnv {
         self.locals.get(name).copied()
     }
 
+    /// Remove a variable from the local environment.
+    /// Used for scoped variables like rescue's `=> e` binding.
+    pub fn remove_var(&mut self, name: &str) {
+        self.locals.remove(name);
+    }
+
     /// Get all variables
     pub fn all_vars(&self) -> impl Iterator<Item = (&String, &VertexId)> {
         self.locals.iter()
@@ -44,6 +50,23 @@ mod tests {
         assert_eq!(lenv.get_var("x"), Some(VertexId(1)));
         assert_eq!(lenv.get_var("y"), Some(VertexId(2)));
         assert_eq!(lenv.get_var("z"), None);
+    }
+
+    #[test]
+    fn test_local_env_remove_var() {
+        let mut lenv = LocalEnv::new();
+
+        lenv.new_var("e".to_string(), VertexId(1));
+        assert_eq!(lenv.get_var("e"), Some(VertexId(1)));
+
+        lenv.remove_var("e");
+        assert_eq!(lenv.get_var("e"), None);
+    }
+
+    #[test]
+    fn test_local_env_remove_nonexistent() {
+        let mut lenv = LocalEnv::new();
+        lenv.remove_var("x"); // should not panic
     }
 
     #[test]

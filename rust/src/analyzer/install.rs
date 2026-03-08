@@ -11,6 +11,7 @@ use ruby_prism::Node;
 use super::blocks::process_block_node;
 use super::conditionals::{process_case_node, process_if_node, process_unless_node};
 use super::definitions::{process_class_node, process_def_node, process_module_node};
+use super::exceptions::{process_begin_node, process_rescue_modifier_node};
 use super::dispatch::{dispatch_needs_child, dispatch_simple, process_needs_child, DispatchResult};
 use super::literals::install_literal_node;
 use super::loops::{process_until_node, process_while_node};
@@ -78,6 +79,13 @@ pub(crate) fn install_node(
     }
     if let Some(case_node) = node.as_case_node() {
         return process_case_node(genv, lenv, changes, source, &case_node);
+    }
+
+    if let Some(begin_node) = node.as_begin_node() {
+        return process_begin_node(genv, lenv, changes, source, &begin_node);
+    }
+    if let Some(rescue_modifier) = node.as_rescue_modifier_node() {
+        return process_rescue_modifier_node(genv, lenv, changes, source, &rescue_modifier);
     }
 
     if let Some(while_node) = node.as_while_node() {
