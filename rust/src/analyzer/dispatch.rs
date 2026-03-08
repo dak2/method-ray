@@ -290,6 +290,10 @@ fn process_method_call_common<'a>(
     block: Option<Node<'a>>,
     arguments: Vec<Node<'a>>,
 ) -> Option<VertexId> {
+    if method_name == "!" {
+        return Some(super::operators::process_not_operator(genv));
+    }
+
     let arg_vtxs: Vec<VertexId> = arguments
         .iter()
         .filter_map(|arg| super::install::install_node(genv, lenv, changes, source, arg))
