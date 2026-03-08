@@ -8,6 +8,7 @@ use crate::env::{GlobalEnv, LocalEnv};
 use crate::graph::{ChangeSet, VertexId};
 use ruby_prism::Node;
 
+use super::assignments::process_multi_write_node;
 use super::blocks::process_block_node;
 use super::conditionals::{process_case_node, process_if_node, process_unless_node};
 use super::definitions::{process_class_node, process_def_node, process_module_node};
@@ -108,6 +109,10 @@ pub(crate) fn install_node(
     }
     if let Some(or_node) = node.as_or_node() {
         return process_or_node(genv, lenv, changes, source, &or_node);
+    }
+
+    if let Some(multi_write) = node.as_multi_write_node() {
+        return process_multi_write_node(genv, lenv, changes, source, &multi_write);
     }
 
     match dispatch_simple(genv, lenv, node) {
