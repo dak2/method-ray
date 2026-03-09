@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-03-09
+
+### Added
+
+- while/until loop support to type inference ([#46](https://github.com/dak2/method-ray/pull/46))
+- Not operator (!) support to type inference ([#47](https://github.com/dak2/method-ray/pull/47))
+- begin/rescue/ensure exception handling support to type inference ([#48](https://github.com/dak2/method-ray/pull/48))
+- Keyword argument support to type inference ([#49](https://github.com/dak2/method-ray/pull/49))
+- Multiple assignment support to type inference ([#50](https://github.com/dak2/method-ray/pull/50))
+
+### Changed
+
+- Resolve all Clippy warnings for cleaner, more idiomatic Rust ([#51](https://github.com/dak2/method-ray/pull/51))
+
 ## [0.1.7] - 2026-03-07
 
 ### Added
@@ -109,6 +123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - `methodray check` - Static type checking for Ruby files
 
+[0.1.8]: https://github.com/dak2/method-ray/releases/tag/v0.1.8
 [0.1.7]: https://github.com/dak2/method-ray/releases/tag/v0.1.7
 [0.1.6]: https://github.com/dak2/method-ray/releases/tag/v0.1.6
 [0.1.5]: https://github.com/dak2/method-ray/releases/tag/v0.1.5
