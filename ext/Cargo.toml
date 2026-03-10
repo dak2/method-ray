@@ -18,7 +18,7 @@ default = []
 cli = ["methodray-core/cli", "dep:clap", "dep:anyhow"]
 
 [dependencies]
-methodray-core = { path = "../rust", features = ["ruby-ffi"] }
+methodray-core = { path = "../core", features = ["ruby-ffi"] }
 magnus = "0.8"
 clap = { version = "4", features = ["derive"], optional = true }
 anyhow = { version = "1", optional = true }

@@ -46,7 +46,7 @@ module MethodRay
           warn 'Error: CLI binary not found.'
           warn ''
           warn 'For development, build with:'
-          warn '  cd rust && cargo build --release --bin methodray --features cli'
+          warn '  cd core && cargo build --release --bin methodray --features cli'
           warn ''
           warn 'If installed via gem, this might be a platform compatibility issue.'
           warn 'Please report at: https://github.com/dak2/method-ray/issues'

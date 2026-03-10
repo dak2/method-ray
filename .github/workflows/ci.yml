@@ -30,7 +30,7 @@ jobs:
             ext -> target
 
       - name: Rust test
-        run: cargo test --manifest-path rust/Cargo.toml
+        run: cargo test --manifest-path core/Cargo.toml
 
       - name: Build and test
         run: |

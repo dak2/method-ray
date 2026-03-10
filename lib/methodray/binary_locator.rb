@@ -21,8 +21,8 @@ module MethodRay
         File.expand_path(@binary_name, LIB_DIR),
         # Development: target/release (project root)
         File.expand_path("../../target/release/#{@binary_name}", LIB_DIR),
-        # Development: rust/target/release (legacy standalone binary)
-        File.expand_path("../../rust/target/release/#{@legacy_binary_name}", LIB_DIR)
+        # Development: core/target/release (legacy standalone binary)
+        File.expand_path("../../core/target/release/#{@legacy_binary_name}", LIB_DIR)
       ]
     end
   end
