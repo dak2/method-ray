@@ -8,7 +8,7 @@ A fast static type checker for Ruby. Verifies method call validity using graph-b
 
 ```bash
 # Rust tests (most frequently used)
-cd rust && cargo test --lib
+cd core && cargo test --lib
 
 # Rust build (native extension)
 bundle exec rake compile
@@ -20,10 +20,10 @@ bundle exec rake test
 bundle exec rake
 
 # CLI binary build
-cd rust && cargo build --release --bin methodray --features cli
+cd core && cargo build --release --bin methodray --features cli
 
 # Clippy (lint)
-cd rust && cargo clippy --lib --all-features -- -W clippy::all
+cd core && cargo clippy --lib --all-features -- -W clippy::all
 
 # Ruby lint
 bundle exec rubocop
@@ -33,7 +33,7 @@ bundle exec rubocop
 
 ```bash
 # Rust: specific test
-cd rust && cargo test --lib test_name
+cd core && cargo test --lib test_name
 
 # Ruby: specific file
 bundle exec ruby -Ilib -Itest test/string_test.rb
@@ -42,7 +42,7 @@ bundle exec ruby -Ilib -Itest test/string_test.rb
 ## Project Structure
 
 ```
-rust/src/           # Rust core (type inference engine)
+core/src/           # Rust core (type inference engine)
   analyzer/         #   AST → Graph conversion (install.rs is the entry point)
   env/              #   Environment (GlobalEnv, LocalEnv, MethodRegistry, Scope)
   graph/            #   Type graph (Vertex, Box, ChangeSet)
@@ -69,7 +69,7 @@ test/               # Ruby integration tests (minitest)
 
 ### Rust
 
-- Add new AST node handlers as separate files under `rust/src/analyzer/` (e.g., `loops.rs`, `exceptions.rs`)
+- Add new AST node handlers as separate files under `core/src/analyzer/` (e.g., `loops.rs`, `exceptions.rs`)
 - Follow the existing function signature pattern: `process_*_node(genv, lenv, changes, source, node) -> Option<VertexId>`
 - When adding new nodes to `install.rs` dispatch, maintain the ordering: definitions → control flow → literals
 - `#[allow(dead_code)]` is prohibited in principle — remove unused code instead

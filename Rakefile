@@ -23,7 +23,7 @@ end
 namespace :cli do
   desc 'Build CLI binary for current platform'
   task :build do
-    sh 'cd rust && cargo build --release --bin methodray --features cli'
+    sh 'cd core && cargo build --release --bin methodray --features cli'
   end
 
   desc 'Build CLI binary for all platforms (requires cross)'
@@ -37,11 +37,11 @@ namespace :cli do
 
     platforms.each do |rust_target, ruby_platform|
       puts "Building for #{rust_target}..."
-      sh "cd rust && cross build --release --bin methodray --features cli --target #{rust_target}"
+      sh "cd core && cross build --release --bin methodray --features cli --target #{rust_target}"
 
       # Copy binary to platform-specific directory
       binary_name = rust_target.include?('windows') ? 'methodray.exe' : 'methodray'
-      src = "rust/target/#{rust_target}/release/#{binary_name}"
+      src = "core/target/#{rust_target}/release/#{binary_name}"
       dst_dir = "lib/methodray/#{ruby_platform}"
 
       mkdir_p dst_dir

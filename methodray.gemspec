@@ -30,9 +30,9 @@ Gem::Specification.new do |spec|
     'lib/methodray/*.{so,dylib,dll,bundle}', # Precompiled native extensions
     'exe/*',
     'ext/**/*',
-    'rust/**/*.rs',
-    'rust/Cargo.toml',
-    'rust/Cargo.lock',
+    'core/**/*.rs',
+    'core/Cargo.toml',
+    'core/Cargo.lock',
     'README.md',
     'LICENSE',
     'CHANGELOG.md'

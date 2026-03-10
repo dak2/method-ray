@@ -4,7 +4,7 @@ require 'test_helper'
 
 class MethodLoaderTest < Minitest::Test
   def setup
-    require_relative '../rust/src/rbs/method_loader'
+    require_relative '../core/src/rbs/method_loader'
     @loader = Rbs::MethodLoader.new
     @results = @loader.load_methods
   end
