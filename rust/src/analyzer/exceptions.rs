@@ -81,6 +81,24 @@ fn process_rescue_chain(
     }
 }
 
+/// Extract the exception type from rescue node's exception class list.
+/// Falls back to StandardError when no exceptions are specified or none can be resolved.
+// TODO: Non-constant exception expressions (method calls, splats, variables) are silently skipped.
+fn extract_exception_type(rescue_node: &RescueNode) -> Type {
+    let types: Vec<Type> = rescue_node
+        .exceptions()
+        .iter()
+        .filter_map(|exc| super::definitions::extract_constant_path(&exc))
+        .map(|name| Type::instance(&name))
+        .collect();
+
+    if types.is_empty() {
+        Type::instance("StandardError")
+    } else {
+        Type::union_of(types)
+    }
+}
+
 /// Process a single RescueNode body.
 /// Registers the rescue variable (=> e), processes the body,
 /// then removes the variable from scope.
@@ -97,14 +115,14 @@ fn process_rescue_body(
 
     // Save/restore rescue variable binding (=> e)
     // TODO: Only LocalVariableTargetNode is handled; instance/global/class vars are not yet supported.
-    // TODO: Always typed as StandardError regardless of declared exception class.
     let var_binding = if let Some(ref_node) = rescue_node.reference() {
         ref_node.as_local_variable_target_node().map(|target| {
             let name = bytes_to_name(target.name().as_slice());
             let saved = lenv.get_var(&name);
             let exception_vtx = genv.new_vertex();
-            let std_err_src = genv.new_source(Type::instance("StandardError"));
-            genv.add_edge(std_err_src, exception_vtx);
+            let exception_type = extract_exception_type(rescue_node);
+            let exception_src = genv.new_source(exception_type);
+            genv.add_edge(exception_src, exception_vtx);
             lenv.new_var(name.clone(), exception_vtx);
             (name, saved)
         })
@@ -493,6 +511,89 @@ end
         assert!(
             type_str.contains("StandardError"),
             "should contain StandardError: {}",
+            type_str
+        );
+    }
+
+    #[test]
+    fn test_rescue_specific_exception_class() {
+        let source = r#"
+class Foo
+  def bar
+    begin
+      "hello"
+    rescue ArgumentError => e
+      e
+    end
+  end
+end
+"#;
+        let genv = analyze(source);
+        let info = genv
+            .resolve_method(&Type::instance("Foo"), "bar")
+            .expect("Foo#bar should be registered");
+        let ret_vtx = info.return_vertex.unwrap();
+        let type_str = get_type_show(&genv, ret_vtx);
+        assert!(
+            type_str.contains("ArgumentError"),
+            "should contain ArgumentError: {}",
+            type_str
+        );
+    }
+
+    #[test]
+    fn test_rescue_multiple_exception_classes() {
+        let source = r#"
+class Foo
+  def bar
+    begin
+      "hello"
+    rescue TypeError, NameError => e
+      e
+    end
+  end
+end
+"#;
+        let genv = analyze(source);
+        let info = genv
+            .resolve_method(&Type::instance("Foo"), "bar")
+            .expect("Foo#bar should be registered");
+        let ret_vtx = info.return_vertex.unwrap();
+        let type_str = get_type_show(&genv, ret_vtx);
+        assert!(
+            type_str.contains("TypeError"),
+            "should contain TypeError: {}",
+            type_str
+        );
+        assert!(
+            type_str.contains("NameError"),
+            "should contain NameError: {}",
+            type_str
+        );
+    }
+
+    #[test]
+    fn test_rescue_qualified_exception_class() {
+        let source = r#"
+class Foo
+  def bar
+    begin
+      "hello"
+    rescue Net::HTTPError => e
+      e
+    end
+  end
+end
+"#;
+        let genv = analyze(source);
+        let info = genv
+            .resolve_method(&Type::instance("Foo"), "bar")
+            .expect("Foo#bar should be registered");
+        let ret_vtx = info.return_vertex.unwrap();
+        let type_str = get_type_show(&genv, ret_vtx);
+        assert!(
+            type_str.contains("Net::HTTPError"),
+            "should contain Net::HTTPError: {}",
             type_str
         );
     }

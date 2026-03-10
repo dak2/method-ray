@@ -118,13 +118,9 @@ fn install_array_literal_elements(
 
     let array_type = if element_types.is_empty() {
         Type::array()
-    } else if element_types.len() == 1 {
-        let elem_type = element_types.into_iter().next().unwrap();
-        Type::array_of(elem_type)
     } else {
         let types_vec: Vec<Type> = element_types.into_iter().collect();
-        let union_type = Type::Union(types_vec);
-        Type::array_of(union_type)
+        Type::array_of(Type::union_of(types_vec))
     };
 
     Some(genv.new_source(array_type))
@@ -176,18 +172,8 @@ fn install_hash_literal_elements(
     let hash_type = if key_types.is_empty() || value_types.is_empty() {
         Type::hash()
     } else {
-        let key_type = if key_types.len() == 1 {
-            key_types.into_iter().next().unwrap()
-        } else {
-            let types_vec: Vec<Type> = key_types.into_iter().collect();
-            Type::Union(types_vec)
-        };
-        let value_type = if value_types.len() == 1 {
-            value_types.into_iter().next().unwrap()
-        } else {
-            let types_vec: Vec<Type> = value_types.into_iter().collect();
-            Type::Union(types_vec)
-        };
+        let key_type = Type::union_of(key_types.into_iter().collect());
+        let value_type = Type::union_of(value_types.into_iter().collect());
         Type::hash_of(key_type, value_type)
     };
 

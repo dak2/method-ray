@@ -276,6 +276,17 @@ impl Type {
             type_args: vec![element_type],
         }
     }
+
+    /// Collapse a Vec<Type> into a single Type or Union.
+    /// Returns the single element if len==1, or Union if len>1.
+    /// Panics if the vec is empty.
+    pub fn union_of(mut types: Vec<Type>) -> Self {
+        match types.len() {
+            0 => panic!("union_of called with empty types"),
+            1 => types.pop().unwrap(),
+            _ => Type::Union(types),
+        }
+    }
 }
 
 #[cfg(test)]
