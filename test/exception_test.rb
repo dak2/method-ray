@@ -42,6 +42,49 @@ class ExceptionTest < Minitest::Test
     refute_includes type_str, "String"
   end
 
+  def test_rescue_variable_typed_as_specific_exception
+    source = <<~RUBY
+      x = begin
+            "hello"
+          rescue ArgumentError => e
+            e
+          end
+    RUBY
+
+    types = infer(source)
+    type_str = types["x"]
+    assert_includes type_str, "ArgumentError"
+  end
+
+  def test_rescue_variable_typed_as_union_of_exceptions
+    source = <<~RUBY
+      x = begin
+            "hello"
+          rescue TypeError, NameError => e
+            e
+          end
+    RUBY
+
+    types = infer(source)
+    type_str = types["x"]
+    assert_includes type_str, "TypeError"
+    assert_includes type_str, "NameError"
+  end
+
+  def test_rescue_without_exception_class_defaults_to_standard_error
+    source = <<~RUBY
+      x = begin
+            "hello"
+          rescue => e
+            e
+          end
+    RUBY
+
+    types = infer(source)
+    type_str = types["x"]
+    assert_includes type_str, "StandardError"
+  end
+
   def test_rescue_modifier_union_type
     source = <<~RUBY
       x = "hello" rescue 42
@@ -96,6 +139,26 @@ class ExceptionTest < Minitest::Test
   # ============================================
   # Error Detection (check CLI)
   # ============================================
+
+  def test_rescue_with_specific_exception_returns_string
+    source = <<~RUBY
+      class Catcher
+        def catch_it
+          begin
+            "result"
+          rescue ArgumentError
+            "fallback"
+          end
+        end
+
+        def run
+          self.catch_it.upcase
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
 
   def test_rescue_branch_type_error
     source = <<~RUBY
