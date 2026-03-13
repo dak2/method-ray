@@ -37,6 +37,9 @@ pub struct GlobalEnv {
 
     /// Scope management
     pub scope_manager: ScopeManager,
+
+    /// Module inclusions: class_name → Vec<module_name> (in include order)
+    module_inclusions: HashMap<String, Vec<String>>,
 }
 
 impl GlobalEnv {
@@ -47,6 +50,7 @@ impl GlobalEnv {
             method_registry: MethodRegistry::new(),
             type_errors: Vec::new(),
             scope_manager: ScopeManager::new(),
+            module_inclusions: HashMap::new(),
         }
     }
 
@@ -158,7 +162,16 @@ impl GlobalEnv {
 
     /// Resolve method
     pub fn resolve_method(&self, recv_ty: &Type, method_name: &str) -> Option<&MethodInfo> {
-        self.method_registry.resolve(recv_ty, method_name)
+        self.method_registry
+            .resolve(recv_ty, method_name, &self.module_inclusions)
+    }
+
+    /// Record that a class includes a module
+    pub fn record_include(&mut self, class_name: &str, module_name: &str) {
+        self.module_inclusions
+            .entry(class_name.to_string())
+            .or_default()
+            .push(module_name.to_string());
     }
 
     /// Register built-in method

@@ -62,6 +62,10 @@ pub enum NeedsChildKind<'a> {
         kind: AttrKind,
         attr_names: Vec<String>,
     },
+    /// include declaration: `include Greetable, Enumerable`
+    IncludeDeclaration {
+        module_names: Vec<String>,
+    },
 }
 
 /// First pass: check if node can be handled immediately without child processing
@@ -189,6 +193,25 @@ pub fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<NeedsCh
                 return None;
             }
 
+            if method_name == "include" {
+                let module_names: Vec<String> = call_node
+                    .arguments()
+                    .map(|args| {
+                        args.arguments()
+                            .iter()
+                            .filter_map(|arg| {
+                                super::definitions::extract_constant_path(&arg)
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                if !module_names.is_empty() {
+                    return Some(NeedsChildKind::IncludeDeclaration { module_names });
+                }
+                return None;
+            }
+
             let prism_location = call_node
                 .message_loc()
                 .unwrap_or_else(|| node.location());
@@ -260,6 +283,16 @@ pub(crate) fn process_needs_child(
         }
         NeedsChildKind::AttrDeclaration { kind, attr_names } => {
             super::attributes::process_attr_declaration(genv, kind, attr_names);
+            None
+        }
+        NeedsChildKind::IncludeDeclaration { module_names } => {
+            if let Some(class_name) = genv.scope_manager.current_qualified_name() {
+                // Ruby processes `include A, B` right-to-left (B first, then A on top),
+                // so A ends up with higher MRO priority. Reverse to match this behavior.
+                for module_name in module_names.iter().rev() {
+                    genv.record_include(&class_name, module_name);
+                }
+            }
             None
         }
     }
@@ -1131,6 +1164,227 @@ User.new.profile(name: "Alice", age: 30)
         let info = genv
             .resolve_method(&Type::instance("User"), "profile")
             .expect("User#profile should be registered");
+        let ret_vtx = info.return_vertex.unwrap();
+        assert_eq!(get_type_show(&genv, ret_vtx), "String");
+    }
+
+    // === Include (mixin) tests ===
+
+    // Test 31: Basic include — module method resolved on class instance
+    #[test]
+    fn test_include_basic() {
+        let source = r#"
+module Greetable
+  def greet
+    "Hello!"
+  end
+end
+
+class User
+  include Greetable
+end
+
+User.new.greet
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "include should resolve Greetable#greet: {:?}",
+            genv.type_errors
+        );
+    }
+
+    // Test 32: Include method return type inference
+    #[test]
+    fn test_include_method_return_type() {
+        let source = r#"
+module Greetable
+  def greet
+    "Hello!"
+  end
+end
+
+class User
+  include Greetable
+
+  def say_hello
+    greet
+  end
+end
+"#;
+        let genv = analyze(source);
+
+        let info = genv
+            .resolve_method(&Type::instance("User"), "say_hello")
+            .expect("User#say_hello should be registered");
+        let ret_vtx = info.return_vertex.unwrap();
+        assert_eq!(get_type_show(&genv, ret_vtx), "String");
+    }
+
+    // Test 33: Multiple includes — last included module has priority
+    #[test]
+    fn test_include_multiple_modules() {
+        let source = r#"
+module A
+  def foo
+    "from A"
+  end
+end
+
+module B
+  def foo
+    42
+  end
+end
+
+class User
+  include A
+  include B
+end
+
+User.new.foo
+"#;
+        let genv = analyze(source);
+        assert!(genv.type_errors.is_empty());
+
+        // B is included last → B#foo (Integer) should be resolved
+        let info = genv
+            .resolve_method(&Type::instance("User"), "foo")
+            .expect("User#foo should be resolved via include");
+        let ret_vtx = info.return_vertex.unwrap();
+        assert_eq!(get_type_show(&genv, ret_vtx), "Integer");
+    }
+
+    // Test 34: Class's own method takes priority over included module
+    #[test]
+    fn test_include_class_method_priority() {
+        let source = r#"
+module Greetable
+  def greet
+    "Hello from module!"
+  end
+end
+
+class User
+  include Greetable
+
+  def greet
+    42
+  end
+end
+
+User.new.greet
+"#;
+        let genv = analyze(source);
+
+        let info = genv
+            .resolve_method(&Type::instance("User"), "greet")
+            .expect("User#greet should be resolved");
+        let ret_vtx = info.return_vertex.unwrap();
+        // Class's own method (Integer) takes priority
+        assert_eq!(get_type_show(&genv, ret_vtx), "Integer");
+    }
+
+    // Test 35: Include with qualified module name
+    #[test]
+    fn test_include_qualified_module() {
+        let source = r#"
+module Api
+  module Helpers
+    def help
+      "help"
+    end
+  end
+end
+
+class User
+  include Api::Helpers
+end
+
+User.new.help
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "include Api::Helpers should resolve: {:?}",
+            genv.type_errors
+        );
+    }
+
+    // Test 36: Include with simultaneous multiple modules
+    #[test]
+    fn test_include_simultaneous_multiple() {
+        let source = r#"
+module A
+  def a_method
+    "a"
+  end
+end
+
+module B
+  def b_method
+    42
+  end
+end
+
+class User
+  include A, B
+end
+
+User.new.a_method
+User.new.b_method
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "include A, B should resolve both modules: {:?}",
+            genv.type_errors
+        );
+    }
+
+    // Test 37: Include with unknown module (no crash)
+    #[test]
+    fn test_include_unknown_module() {
+        let source = r#"
+class User
+  include UnknownModule
+end
+"#;
+        let genv = analyze(source);
+        // Should not panic; unknown module is recorded but methods won't resolve
+        let _ = genv;
+    }
+
+    // Test 38: Simultaneous include A, B — A has higher MRO priority (Ruby semantics)
+    #[test]
+    fn test_include_simultaneous_order() {
+        let source = r#"
+module A
+  def foo
+    "from A"
+  end
+end
+
+module B
+  def foo
+    42
+  end
+end
+
+class User
+  include A, B
+end
+
+User.new.foo
+"#;
+        let genv = analyze(source);
+        assert!(genv.type_errors.is_empty());
+
+        // Ruby's `include A, B` processes right-to-left: B first, then A on top.
+        // A has higher MRO priority → A#foo (String) should be resolved.
+        let info = genv
+            .resolve_method(&Type::instance("User"), "foo")
+            .expect("User#foo should be resolved via include");
         let ret_vtx = info.return_vertex.unwrap();
         assert_eq!(get_type_show(&genv, ret_vtx), "String");
     }
