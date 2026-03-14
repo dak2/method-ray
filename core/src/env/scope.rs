@@ -245,6 +245,28 @@ impl ScopeManager {
         Some(path_segments.join("::"))
     }
 
+    /// Get current method name from nearest enclosing method scope
+    pub fn current_method_name(&self) -> Option<String> {
+        self.walk_scopes().find_map(|scope| {
+            if let ScopeKind::Method { name, .. } = &scope.kind {
+                Some(name.clone())
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Get superclass name from nearest enclosing class scope
+    pub fn current_superclass(&self) -> Option<String> {
+        self.walk_scopes().find_map(|scope| {
+            if let ScopeKind::Class { superclass, .. } = &scope.kind {
+                superclass.clone()
+            } else {
+                None
+            }
+        })
+    }
+
     /// Get return_vertex from the nearest enclosing method scope
     pub fn current_method_return_vertex(&self) -> Option<VertexId> {
         self.walk_scopes().find_map(|scope| {
@@ -592,5 +614,61 @@ mod tests {
 
         // Inside Admin scope, User should resolve to Admin::User
         assert_eq!(sm.lookup_constant("User"), Some("Admin::User".to_string()));
+    }
+
+    #[test]
+    fn test_current_method_name() {
+        let mut sm = ScopeManager::new();
+        let class_id = sm.new_scope(ScopeKind::Class {
+            name: "User".to_string(),
+            superclass: None,
+        });
+        sm.enter_scope(class_id);
+        let method_id = sm.new_scope(ScopeKind::Method {
+            name: "greet".to_string(),
+            receiver_type: None,
+            return_vertex: None,
+        });
+        sm.enter_scope(method_id);
+        assert_eq!(sm.current_method_name(), Some("greet".to_string()));
+
+        sm.exit_scope();
+        assert_eq!(sm.current_method_name(), None);
+    }
+
+    #[test]
+    fn test_current_superclass() {
+        let mut sm = ScopeManager::new();
+        let class_id = sm.new_scope(ScopeKind::Class {
+            name: "Dog".to_string(),
+            superclass: Some("Animal".to_string()),
+        });
+        sm.enter_scope(class_id);
+        assert_eq!(sm.current_superclass(), Some("Animal".to_string()));
+
+        sm.exit_scope();
+        assert_eq!(sm.current_superclass(), None);
+    }
+
+    #[test]
+    fn test_current_method_name_from_nested_block() {
+        let mut sm = ScopeManager::new();
+        let class_id = sm.new_scope(ScopeKind::Class {
+            name: "User".to_string(),
+            superclass: Some("Base".to_string()),
+        });
+        sm.enter_scope(class_id);
+        let method_id = sm.new_scope(ScopeKind::Method {
+            name: "process".to_string(),
+            receiver_type: None,
+            return_vertex: None,
+        });
+        sm.enter_scope(method_id);
+        let block_id = sm.new_scope(ScopeKind::Block);
+        sm.enter_scope(block_id);
+
+        // Inside a block, should still find enclosing method/superclass
+        assert_eq!(sm.current_method_name(), Some("process".to_string()));
+        assert_eq!(sm.current_superclass(), Some("Base".to_string()));
     }
 }

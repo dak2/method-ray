@@ -26,7 +26,8 @@ pub(crate) fn process_class_node(
     class_node: &ruby_prism::ClassNode,
 ) -> Option<VertexId> {
     let class_name = extract_class_name(class_node);
-    install_class(genv, class_name);
+    let superclass = class_node.superclass().and_then(|sup| extract_constant_path(&sup));
+    install_class(genv, class_name, superclass.as_deref());
 
     if let Some(body) = class_node.body() {
         if let Some(statements) = body.as_statements_node() {
@@ -126,8 +127,8 @@ pub(crate) fn process_def_node(
 }
 
 /// Install class definition
-fn install_class(genv: &mut GlobalEnv, class_name: String) {
-    genv.enter_class(class_name);
+fn install_class(genv: &mut GlobalEnv, class_name: String, superclass: Option<&str>) {
+    genv.enter_class(class_name, superclass);
 }
 
 /// Install module definition
@@ -203,7 +204,7 @@ mod tests {
     fn test_enter_exit_class_scope() {
         let mut genv = GlobalEnv::new();
 
-        install_class(&mut genv, "User".to_string());
+        install_class(&mut genv, "User".to_string(), None);
         assert_eq!(
             genv.scope_manager.current_class_name(),
             Some("User".to_string())
@@ -231,7 +232,7 @@ mod tests {
     fn test_nested_method_scope() {
         let mut genv = GlobalEnv::new();
 
-        install_class(&mut genv, "User".to_string());
+        install_class(&mut genv, "User".to_string(), None);
         install_method(&mut genv, "greet".to_string());
 
         // Still in User class context

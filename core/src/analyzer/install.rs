@@ -19,6 +19,7 @@ use super::loops::{process_for_node, process_until_node, process_while_node};
 use super::operators::{process_and_node, process_or_node};
 use super::parentheses::process_parentheses_node;
 use super::returns::process_return_node;
+use super::super_calls;
 
 /// Build graph from AST (public API wrapper)
 pub struct AstInstaller<'a> {
@@ -87,6 +88,17 @@ pub(crate) fn install_node(
     }
     if let Some(rescue_modifier) = node.as_rescue_modifier_node() {
         return process_rescue_modifier_node(genv, lenv, changes, source, &rescue_modifier);
+    }
+
+    // SuperNode: super(args) — explicit arguments
+    if let Some(super_node) = node.as_super_node() {
+        return super_calls::process_super_node(genv, lenv, changes, source, &super_node);
+    }
+    // ForwardingSuperNode: super — implicit argument forwarding
+    if let Some(fwd_super_node) = node.as_forwarding_super_node() {
+        return super_calls::process_forwarding_super_node(
+            genv, lenv, changes, source, &fwd_super_node,
+        );
     }
 
     if let Some(while_node) = node.as_while_node() {
