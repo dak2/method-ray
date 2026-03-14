@@ -37,6 +37,20 @@ class LoopTest < Minitest::Test
     assert_no_check_errors(source)
   end
 
+  def test_for_loop_basic_no_error
+    source = <<~RUBY
+      class Foo
+        def bar
+          for item in ["hello", "world"]
+            item.upcase
+          end
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
   # ============================================
   # Error Detection (check CLI)
   # ============================================
@@ -51,6 +65,20 @@ class LoopTest < Minitest::Test
         def baz
           while true
             self.bar.upcase
+          end
+        end
+      end
+    RUBY
+
+    assert_check_error(source, method_name: 'upcase', receiver_type: 'Integer')
+  end
+
+  def test_for_loop_detects_type_error
+    source = <<~RUBY
+      class Foo
+        def bar
+          for item in [1, 2, 3]
+            item.upcase
           end
         end
       end
