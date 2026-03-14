@@ -15,7 +15,7 @@ use super::definitions::{process_class_node, process_def_node, process_module_no
 use super::exceptions::{process_begin_node, process_rescue_modifier_node};
 use super::dispatch::{dispatch_needs_child, dispatch_simple, process_needs_child, DispatchResult};
 use super::literals::install_literal_node;
-use super::loops::{process_until_node, process_while_node};
+use super::loops::{process_for_node, process_until_node, process_while_node};
 use super::operators::{process_and_node, process_or_node};
 use super::parentheses::process_parentheses_node;
 use super::returns::process_return_node;
@@ -94,6 +94,9 @@ pub(crate) fn install_node(
     }
     if let Some(until_node) = node.as_until_node() {
         return process_until_node(genv, lenv, changes, source, &until_node);
+    }
+    if let Some(for_node) = node.as_for_node() {
+        return process_for_node(genv, lenv, changes, source, &for_node);
     }
 
     if let Some(paren_node) = node.as_parentheses_node() {
