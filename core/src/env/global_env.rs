@@ -40,6 +40,7 @@ pub struct GlobalEnv {
 
     /// Module inclusions: class_name → Vec<module_name> (in include order)
     module_inclusions: HashMap<String, Vec<String>>,
+
 }
 
 impl GlobalEnv {
@@ -238,11 +239,11 @@ impl GlobalEnv {
         }
     }
 
-    /// Enter a class scope
-    pub fn enter_class(&mut self, name: String) -> ScopeId {
+    /// Enter a class scope with optional superclass
+    pub fn enter_class(&mut self, name: String, superclass: Option<&str>) -> ScopeId {
         let scope_id = self.scope_manager.new_scope(ScopeKind::Class {
             name: name.clone(),
-            superclass: None,
+            superclass: superclass.map(|s| s.to_string()),
         });
         self.scope_manager.enter_scope(scope_id);
         self.register_constant_in_parent(scope_id, &name);

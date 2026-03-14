@@ -13,6 +13,7 @@ mod operators;
 mod parameters;
 mod parentheses;
 mod returns;
+mod super_calls;
 mod variables;
 
 pub use install::AstInstaller;

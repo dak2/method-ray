@@ -18,6 +18,45 @@ use super::variables::{
     install_self,
 };
 
+/// Collect positional and keyword arguments from AST argument nodes.
+///
+/// Shared by method calls (`dispatch.rs`) and super calls (`super_calls.rs`).
+pub(crate) fn collect_arguments<'a>(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    args: impl Iterator<Item = ruby_prism::Node<'a>>,
+) -> (Vec<VertexId>, Option<HashMap<String, VertexId>>) {
+    let mut positional: Vec<VertexId> = Vec::new();
+    let mut keyword: HashMap<String, VertexId> = HashMap::new();
+
+    for arg in args {
+        if let Some(kw_hash) = arg.as_keyword_hash_node() {
+            for element in kw_hash.elements().iter() {
+                let assoc = match element.as_assoc_node() {
+                    Some(a) => a,
+                    None => continue,
+                };
+                let name = match assoc.key().as_symbol_node() {
+                    Some(sym) => bytes_to_name(sym.unescaped()),
+                    None => continue,
+                };
+                if let Some(vtx) =
+                    super::install::install_node(genv, lenv, changes, source, &assoc.value())
+                {
+                    keyword.insert(name, vtx);
+                }
+            }
+        } else if let Some(vtx) = super::install::install_node(genv, lenv, changes, source, &arg) {
+            positional.push(vtx);
+        }
+    }
+
+    let kw = (!keyword.is_empty()).then_some(keyword);
+    (positional, kw)
+}
+
 /// Kind of attr_* declaration
 #[derive(Debug, Clone, Copy)]
 pub enum AttrKind {
@@ -343,31 +382,8 @@ fn process_method_call_common<'a>(
         return Some(super::operators::process_not_operator(genv));
     }
 
-    // Separate positional arguments and keyword arguments
-    let mut positional_arg_vtxs: Vec<VertexId> = Vec::new();
-    let mut keyword_arg_vtxs: HashMap<String, VertexId> = HashMap::new();
-
-    for arg in &arguments {
-        if let Some(kw_hash) = arg.as_keyword_hash_node() {
-            for element in kw_hash.elements().iter() {
-                let assoc = match element.as_assoc_node() {
-                    Some(a) => a,
-                    None => continue,
-                };
-                let name = match assoc.key().as_symbol_node() {
-                    Some(sym) => bytes_to_name(sym.unescaped()),
-                    None => continue,
-                };
-                if let Some(vtx) =
-                    super::install::install_node(genv, lenv, changes, source, &assoc.value())
-                {
-                    keyword_arg_vtxs.insert(name, vtx);
-                }
-            }
-        } else if let Some(vtx) = super::install::install_node(genv, lenv, changes, source, arg) {
-            positional_arg_vtxs.push(vtx);
-        }
-    }
+    let (positional_arg_vtxs, kwarg_vtxs) =
+        collect_arguments(genv, lenv, changes, source, arguments.into_iter());
 
     if let Some(block_node) = block {
         if let Some(block) = block_node.as_block_node() {
@@ -387,12 +403,6 @@ fn process_method_call_common<'a>(
             }
         }
     }
-
-    let kwarg_vtxs = if keyword_arg_vtxs.is_empty() {
-        None
-    } else {
-        Some(keyword_arg_vtxs)
-    };
 
     Some(finish_method_call(
         genv,
