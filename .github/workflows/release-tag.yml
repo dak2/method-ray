@@ -33,3 +33,10 @@ jobs:
         run: |
           git tag "$TAG"
           git push origin "$TAG"
+
+      - name: Create GitHub Release
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$TAG" --generate-notes
