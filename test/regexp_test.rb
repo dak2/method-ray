@@ -10,12 +10,12 @@ class RegexpTest < Minitest::Test
   # ============================================
 
   def test_regexp_literal
-    assert_type "x = /hello/", "x", "Regexp"
+    assert_type 'x = /hello/', 'x', 'Regexp'
   end
 
   def test_regexp_source_returns_string
     types = infer("x = /hello/\na = x.source")
-    assert_equal "String", types["a"]
+    assert_equal 'String', types['a']
   end
 
   # ============================================

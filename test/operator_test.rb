@@ -15,9 +15,9 @@ class OperatorTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "TrueClass"
-    assert_includes type_str, "String"
+    type_str = types['x']
+    assert_includes type_str, 'TrueClass'
+    assert_includes type_str, 'String'
   end
 
   def test_or_operator_union_type
@@ -26,9 +26,9 @@ class OperatorTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "Integer"
-    assert_includes type_str, "String"
+    type_str = types['x']
+    assert_includes type_str, 'Integer'
+    assert_includes type_str, 'String'
   end
 
   def test_arithmetic_operator_type
@@ -36,7 +36,7 @@ class OperatorTest < Minitest::Test
       x = 1 + 2
     RUBY
 
-    assert_type source, "x", "Integer"
+    assert_type source, 'x', 'Integer'
   end
 
   # ============================================
@@ -137,9 +137,9 @@ class OperatorTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "TrueClass"
-    assert_includes type_str, "FalseClass"
+    type_str = types['x']
+    assert_includes type_str, 'TrueClass'
+    assert_includes type_str, 'FalseClass'
   end
 
   def test_not_operator_method_call_no_error
@@ -176,8 +176,8 @@ class OperatorTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "TrueClass"
-    assert_includes type_str, "FalseClass"
+    type_str = types['x']
+    assert_includes type_str, 'TrueClass'
+    assert_includes type_str, 'FalseClass'
   end
 end

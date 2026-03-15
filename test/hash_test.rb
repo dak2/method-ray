@@ -10,27 +10,27 @@ class HashTest < Minitest::Test
   # ============================================
 
   def test_hash_symbol_integer
-    assert_type "x = { a: 1, b: 2 }", "x", "Hash[Symbol, Integer]"
+    assert_type 'x = { a: 1, b: 2 }', 'x', 'Hash[Symbol, Integer]'
   end
 
   def test_hash_string_string
-    assert_type 'x = { "k" => "v" }', "x", "Hash[String, String]"
+    assert_type 'x = { "k" => "v" }', 'x', 'Hash[String, String]'
   end
 
   def test_hash_mixed_values
     types = infer('x = { a: 1, b: "x" }')
     assert_includes(
-      ["Hash[Symbol, Integer | String]", "Hash[Symbol, String | Integer]"],
-      types["x"]
+      ['Hash[Symbol, Integer | String]', 'Hash[Symbol, String | Integer]'],
+      types['x']
     )
   end
 
   def test_hash_empty
-    assert_type "x = {}", "x", "Hash"
+    assert_type 'x = {}', 'x', 'Hash'
   end
 
   def test_hash_nested
-    assert_type "x = { a: [1] }", "x", "Hash[Symbol, Array[Integer]]"
+    assert_type 'x = { a: [1] }', 'x', 'Hash[Symbol, Array[Integer]]'
   end
 
   # ============================================

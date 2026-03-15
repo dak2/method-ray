@@ -10,7 +10,7 @@ class StringTest < Minitest::Test
   # ============================================
 
   def test_string_literal
-    assert_type 'x = "hello"', "x", "String"
+    assert_type 'x = "hello"', 'x', 'String'
   end
 
   def test_multiple_vars
@@ -19,8 +19,8 @@ class StringTest < Minitest::Test
       y = 42
     RUBY
 
-    assert_equal "String", types["x"]
-    assert_equal "Integer", types["y"]
+    assert_equal 'String', types['x']
+    assert_equal 'Integer', types['y']
   end
 
   def test_method_call_return_type
@@ -29,12 +29,12 @@ class StringTest < Minitest::Test
       y = x.upcase
     RUBY
 
-    assert_equal "String", types["x"]
-    assert_equal "String", types["y"]
+    assert_equal 'String', types['x']
+    assert_equal 'String', types['y']
   end
 
   def test_interpolated_string_literal
-    assert_type 'x = "hello #{1 + 2}"', "x", "String"
+    assert_type 'x = "hello #{1 + 2}"', 'x', 'String'
   end
 
   # ============================================
@@ -86,5 +86,4 @@ class StringTest < Minitest::Test
     RUBY
     assert_check_error(source, method_name: 'ceil', receiver_type: 'String')
   end
-
 end

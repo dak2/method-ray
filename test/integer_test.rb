@@ -10,7 +10,7 @@ class IntegerTest < Minitest::Test
   # ============================================
 
   def test_integer_literal
-    assert_type "x = 42", "x", "Integer"
+    assert_type 'x = 42', 'x', 'Integer'
   end
 
   # ============================================
