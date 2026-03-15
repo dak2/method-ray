@@ -54,6 +54,8 @@ pub struct MethodCallBox {
     arg_vtxs: Vec<VertexId>,
     kwarg_vtxs: Option<HashMap<String, VertexId>>,
     location: Option<SourceLocation>, // Source code location
+    /// Whether this is a safe navigation call (`&.`)
+    safe_navigation: bool,
     /// Number of times this box has been rescheduled
     reschedule_count: u8,
 }
@@ -62,6 +64,7 @@ pub struct MethodCallBox {
 const MAX_RESCHEDULE_COUNT: u8 = 3;
 
 impl MethodCallBox {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: BoxId,
         recv: VertexId,
@@ -70,6 +73,7 @@ impl MethodCallBox {
         arg_vtxs: Vec<VertexId>,
         kwarg_vtxs: Option<HashMap<String, VertexId>>,
         location: Option<SourceLocation>,
+        safe_navigation: bool,
     ) -> Self {
         Self {
             id,
@@ -79,6 +83,7 @@ impl MethodCallBox {
             arg_vtxs,
             kwarg_vtxs,
             location,
+            safe_navigation,
             reschedule_count: 0,
         }
     }
@@ -100,6 +105,13 @@ impl MethodCallBox {
         genv: &mut GlobalEnv,
         changes: &mut ChangeSet,
     ) {
+        // Safe navigation (`&.`): skip nil receiver entirely.
+        // Ruby's &. short-circuits: no method resolution, no argument evaluation, no error.
+        // The nil return type is added in run() after processing all receiver types.
+        if self.safe_navigation && matches!(recv_ty, Type::Nil) {
+            return;
+        }
+
         if let Some(method_info) = genv.resolve_method(recv_ty, &self.method_name) {
             if let Some(return_vtx) = method_info.return_vertex {
                 // User-defined method: connect body's return vertex to call site
@@ -186,8 +198,14 @@ impl BoxTrait for MethodCallBox {
             return;
         }
 
-        for recv_ty in recv_types {
-            self.process_recv_type(&recv_ty, genv, changes);
+        for recv_ty in &recv_types {
+            self.process_recv_type(recv_ty, genv, changes);
+        }
+
+        // Safe navigation (`&.`): if receiver can be nil, return type includes nil
+        if self.safe_navigation && recv_types.iter().any(|t| matches!(t, Type::Nil)) {
+            let nil_src = genv.new_source(Type::Nil);
+            changes.add_edge(nil_src, self.ret);
         }
     }
 }
@@ -357,6 +375,7 @@ mod tests {
             vec![],
             None,
             None, // No location in test
+            false,
         );
 
         // Execute Box
@@ -390,6 +409,7 @@ mod tests {
             vec![],
             None,
             None, // No location in test
+            false,
         );
 
         let mut changes = ChangeSet::new();
@@ -601,6 +621,7 @@ mod tests {
             vec![],
             None,
             None,
+            false,
         );
         genv.register_box(box_id, Box::new(call_box));
 
@@ -632,6 +653,7 @@ mod tests {
             vec![],
             None,
             None,
+            false,
         );
         genv.register_box(inner_box_id, Box::new(inner_call));
 
@@ -661,6 +683,7 @@ mod tests {
             vec![arg_vtx],
             None,
             None,
+            false,
         );
         genv.register_box(call_box_id, Box::new(call_box));
 
@@ -710,6 +733,7 @@ mod tests {
             vec![],
             Some(kwarg_vtxs),
             None,
+            false,
         );
         genv.register_box(box_id, Box::new(call_box));
 
@@ -755,6 +779,7 @@ mod tests {
             vec![],
             Some(kwarg_vtxs),
             None,
+            false,
         );
         genv.register_box(box_id, Box::new(call_box));
 
@@ -762,5 +787,59 @@ mod tests {
 
         // param_vtx should remain untyped (name mismatch → no propagation)
         assert_eq!(genv.get_vertex(param_vtx).unwrap().show(), "untyped");
+    }
+
+    // === Safe navigation (`&.`) unit tests ===
+
+    fn setup_safe_nav_test(recv_types: &[Type], safe_navigation: bool) -> (GlobalEnv, VertexId) {
+        let mut genv = GlobalEnv::new();
+        genv.register_builtin_method(Type::string(), "upcase", Type::string());
+
+        let recv_vtx = genv.new_vertex();
+        for ty in recv_types {
+            let src = genv.new_source(ty.clone());
+            genv.add_edge(src, recv_vtx);
+        }
+
+        let ret_vtx = genv.new_vertex();
+        let box_id = genv.alloc_box_id();
+        let call_box = MethodCallBox::new(
+            box_id, recv_vtx, "upcase".to_string(), ret_vtx,
+            vec![], None, None, safe_navigation,
+        );
+        genv.register_box(box_id, Box::new(call_box));
+        genv.run_all();
+        (genv, ret_vtx)
+    }
+
+    #[test]
+    fn test_safe_navigation_nil_receiver_no_error() {
+        let (genv, _) = setup_safe_nav_test(&[Type::Nil], true);
+        assert!(genv.type_errors.is_empty(), "nil&.upcase should not produce type errors");
+    }
+
+    #[test]
+    fn test_safe_navigation_nilable_receiver_return_includes_nil() {
+        let (genv, ret_vtx) = setup_safe_nav_test(&[Type::string(), Type::Nil], true);
+        assert!(genv.type_errors.is_empty());
+
+        let ret_vertex = genv.get_vertex(ret_vtx).unwrap();
+        let type_names: Vec<String> = ret_vertex.types.keys().map(|t| t.show()).collect();
+        assert!(type_names.contains(&"String".to_string()), "should include String: {:?}", type_names);
+        assert!(type_names.contains(&"nil".to_string()), "should include nil: {:?}", type_names);
+    }
+
+    #[test]
+    fn test_safe_navigation_non_nil_receiver_no_spurious_nil() {
+        let (genv, ret_vtx) = setup_safe_nav_test(&[Type::string()], true);
+        assert_eq!(genv.get_vertex(ret_vtx).unwrap().show(), "String",
+            "non-nil receiver with &. should return String, not String | nil");
+    }
+
+    #[test]
+    fn test_normal_call_does_not_add_nil() {
+        let (genv, ret_vtx) = setup_safe_nav_test(&[Type::string(), Type::Nil], false);
+        assert_eq!(genv.get_vertex(ret_vtx).unwrap().show(), "String",
+            "normal call (.) should not add nil to return type");
     }
 }

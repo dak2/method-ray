@@ -19,6 +19,7 @@ pub fn install_method_call(
     arg_vtxs: Vec<VertexId>,
     kwarg_vtxs: Option<HashMap<String, VertexId>>,
     location: Option<SourceLocation>,
+    safe_navigation: bool,
 ) -> VertexId {
     // Create Vertex for return value
     let ret_vtx = genv.new_vertex();
@@ -26,7 +27,7 @@ pub fn install_method_call(
     // Create MethodCallBox with location and argument vertices
     let box_id = genv.alloc_box_id();
     let call_box =
-        MethodCallBox::new(box_id, recv_vtx, method_name, ret_vtx, arg_vtxs, kwarg_vtxs, location);
+        MethodCallBox::new(box_id, recv_vtx, method_name, ret_vtx, arg_vtxs, kwarg_vtxs, location, safe_navigation);
     genv.register_box(box_id, Box::new(call_box));
 
     ret_vtx
@@ -43,7 +44,7 @@ mod tests {
 
         let recv_vtx = genv.new_source(Type::string());
         let ret_vtx =
-            install_method_call(&mut genv, recv_vtx, "upcase".to_string(), vec![], None, None);
+            install_method_call(&mut genv, recv_vtx, "upcase".to_string(), vec![], None, None, false);
 
         // Return vertex should exist
         assert!(genv.get_vertex(ret_vtx).is_some());
@@ -55,7 +56,7 @@ mod tests {
 
         let recv_vtx = genv.new_source(Type::string());
         let _ret_vtx =
-            install_method_call(&mut genv, recv_vtx, "upcase".to_string(), vec![], None, None);
+            install_method_call(&mut genv, recv_vtx, "upcase".to_string(), vec![], None, None, false);
 
         // Box should be added
         assert_eq!(genv.box_count(), 1);

@@ -69,6 +69,7 @@ fn process_super_call(
         arg_vtxs,
         kw,
         Some(location),
+        false, // super calls cannot use safe navigation
     ))
 }
 
