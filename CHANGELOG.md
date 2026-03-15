@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2026-03-15
+
+### Added
+
+- Add linter CI workflow for Clippy and RuboCop ([#61](https://github.com/dak2/method-ray/pull/61))
+- Add unit tests for blocks and parameters analyzers ([#60](https://github.com/dak2/method-ray/pull/60))
+- Add super call type inference support ([#59](https://github.com/dak2/method-ray/pull/59))
+- Add for loop type inference support ([#58](https://github.com/dak2/method-ray/pull/58))
+- Add module include support for mixin method resolution ([#57](https://github.com/dak2/method-ray/pull/57))
+- Add complete multi-assignment type inference ([#56](https://github.com/dak2/method-ray/pull/56))
+- Add auto-tagging workflow for release PR merges ([#53](https://github.com/dak2/method-ray/pull/53))
+
+### Changed
+
+- Rename rust/ directory to core/ ([#55](https://github.com/dak2/method-ray/pull/55))
+- Infer actual exception types in rescue clauses ([#54](https://github.com/dak2/method-ray/pull/54))
+
 ## [0.1.8] - 2026-03-09
 
 ### Added
@@ -123,6 +140,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - `methodray check` - Static type checking for Ruby files
 
+[0.1.9]: https://github.com/dak2/method-ray/releases/tag/v0.1.9
 [0.1.8]: https://github.com/dak2/method-ray/releases/tag/v0.1.8
 [0.1.7]: https://github.com/dak2/method-ray/releases/tag/v0.1.7
 [0.1.6]: https://github.com/dak2/method-ray/releases/tag/v0.1.6
