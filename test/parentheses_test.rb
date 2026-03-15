@@ -10,7 +10,7 @@ class ParenthesesTest < Minitest::Test
   # ============================================
 
   def test_parenthesized_integer
-    assert_type 'x = (42)', "x", "Integer"
+    assert_type 'x = (42)', 'x', 'Integer'
   end
 
   # ============================================

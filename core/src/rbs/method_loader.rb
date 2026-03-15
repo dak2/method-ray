@@ -65,11 +65,9 @@ module Rbs
       block_func = method_type.block.type
       return nil unless block_func.is_a?(::RBS::Types::Function)
 
-      param_types = []
-
       # Required positional parameters
-      block_func.required_positionals.each do |param|
-        param_types << param.type.to_s
+      param_types = block_func.required_positionals.map do |param|
+        param.type.to_s
       end
 
       # Optional positional parameters

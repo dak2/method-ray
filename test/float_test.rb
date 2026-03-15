@@ -10,22 +10,22 @@ class FloatTest < Minitest::Test
   # ============================================
 
   def test_float_literal
-    assert_type "x = 3.14", "x", "Float"
+    assert_type 'x = 3.14', 'x', 'Float'
   end
 
   def test_float_ceil_returns_integer
     types = infer("x = 3.14\na = x.ceil")
-    assert_equal "Integer", types["a"]
+    assert_equal 'Integer', types['a']
   end
 
   def test_float_floor_returns_integer
     types = infer("x = 3.14\nb = x.floor")
-    assert_equal "Integer", types["b"]
+    assert_equal 'Integer', types['b']
   end
 
   def test_float_abs_returns_float
     types = infer("x = 3.14\nc = x.abs")
-    assert_equal "Float", types["c"]
+    assert_equal 'Float', types['c']
   end
 
   # ============================================

@@ -19,9 +19,9 @@ class ConditionalTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "Integer"
-    assert_includes type_str, "String"
+    type_str = types['x']
+    assert_includes type_str, 'Integer'
+    assert_includes type_str, 'String'
   end
 
   def test_if_without_else_includes_nil
@@ -32,9 +32,9 @@ class ConditionalTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "String"
-    assert_includes type_str, "nil"
+    type_str = types['x']
+    assert_includes type_str, 'String'
+    assert_includes type_str, 'nil'
   end
 
   def test_if_elsif_else_union
@@ -49,10 +49,10 @@ class ConditionalTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "String"
-    assert_includes type_str, "Integer"
-    assert_includes type_str, "Symbol"
+    type_str = types['x']
+    assert_includes type_str, 'String'
+    assert_includes type_str, 'Integer'
+    assert_includes type_str, 'Symbol'
   end
 
   def test_unless_else_union_type
@@ -65,9 +65,9 @@ class ConditionalTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "String"
-    assert_includes type_str, "Integer"
+    type_str = types['x']
+    assert_includes type_str, 'String'
+    assert_includes type_str, 'Integer'
   end
 
   def test_unless_without_else_includes_nil
@@ -78,9 +78,9 @@ class ConditionalTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "String"
-    assert_includes type_str, "nil"
+    type_str = types['x']
+    assert_includes type_str, 'String'
+    assert_includes type_str, 'nil'
   end
 
   def test_case_when_else_union
@@ -96,10 +96,10 @@ class ConditionalTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "String"
-    assert_includes type_str, "Integer"
-    assert_includes type_str, "Symbol"
+    type_str = types['x']
+    assert_includes type_str, 'String'
+    assert_includes type_str, 'Integer'
+    assert_includes type_str, 'Symbol'
   end
 
   def test_case_without_else_includes_nil
@@ -111,9 +111,9 @@ class ConditionalTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "String"
-    assert_includes type_str, "nil"
+    type_str = types['x']
+    assert_includes type_str, 'String'
+    assert_includes type_str, 'nil'
   end
 
   def test_same_type_branches
@@ -125,7 +125,7 @@ class ConditionalTest < Minitest::Test
           end
     RUBY
 
-    assert_type source, "x", "String"
+    assert_type source, 'x', 'String'
   end
 
   # ============================================
@@ -226,7 +226,7 @@ class ConditionalTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    assert_equal "(Integer | String)", types["x"]
+    assert_equal '(Integer | String)', types['x']
   end
 
   def test_ternary_same_type
@@ -234,7 +234,7 @@ class ConditionalTest < Minitest::Test
       x = true ? "hello" : "world"
     RUBY
 
-    assert_type source, "x", "String"
+    assert_type source, 'x', 'String'
   end
 
   def test_ternary_nil_branch
@@ -243,7 +243,7 @@ class ConditionalTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    assert_equal "(String | nil)", types["x"]
+    assert_equal '(String | nil)', types['x']
   end
 
   # ============================================

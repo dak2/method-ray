@@ -19,9 +19,9 @@ class ExceptionTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "Integer"
-    assert_includes type_str, "String"
+    type_str = types['x']
+    assert_includes type_str, 'Integer'
+    assert_includes type_str, 'String'
   end
 
   def test_begin_rescue_else_excludes_begin_body
@@ -36,10 +36,10 @@ class ExceptionTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "Symbol"
-    assert_includes type_str, "Integer"
-    refute_includes type_str, "String"
+    type_str = types['x']
+    assert_includes type_str, 'Symbol'
+    assert_includes type_str, 'Integer'
+    refute_includes type_str, 'String'
   end
 
   def test_rescue_variable_typed_as_specific_exception
@@ -52,8 +52,8 @@ class ExceptionTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "ArgumentError"
+    type_str = types['x']
+    assert_includes type_str, 'ArgumentError'
   end
 
   def test_rescue_variable_typed_as_union_of_exceptions
@@ -66,9 +66,9 @@ class ExceptionTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "TypeError"
-    assert_includes type_str, "NameError"
+    type_str = types['x']
+    assert_includes type_str, 'TypeError'
+    assert_includes type_str, 'NameError'
   end
 
   def test_rescue_without_exception_class_defaults_to_standard_error
@@ -81,8 +81,8 @@ class ExceptionTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "StandardError"
+    type_str = types['x']
+    assert_includes type_str, 'StandardError'
   end
 
   def test_rescue_modifier_union_type
@@ -91,9 +91,9 @@ class ExceptionTest < Minitest::Test
     RUBY
 
     types = infer(source)
-    type_str = types["x"]
-    assert_includes type_str, "Integer"
-    assert_includes type_str, "String"
+    type_str = types['x']
+    assert_includes type_str, 'Integer'
+    assert_includes type_str, 'String'
   end
 
   # ============================================

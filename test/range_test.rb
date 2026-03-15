@@ -10,29 +10,29 @@ class RangeTest < Minitest::Test
   # ============================================
 
   def test_range_integer
-    assert_type "x = 1..5", "x", "Range[Integer]"
+    assert_type 'x = 1..5', 'x', 'Range[Integer]'
   end
 
   def test_range_exclusive
-    assert_type "x = 1...5", "x", "Range[Integer]"
+    assert_type 'x = 1...5', 'x', 'Range[Integer]'
   end
 
   def test_range_string
-    assert_type 'x = "a".."z"', "x", "Range[String]"
+    assert_type 'x = "a".."z"', 'x', 'Range[String]'
   end
 
   def test_range_float
-    assert_type "x = 1.0..5.0", "x", "Range[Float]"
+    assert_type 'x = 1.0..5.0', 'x', 'Range[Float]'
   end
 
   def test_range_to_a_returns_array
     types = infer("x = 1..10\na = x.to_a")
-    assert_equal "Array[Elem]", types["a"]
+    assert_equal 'Array[Elem]', types['a']
   end
 
   def test_range_size_returns_integer
     types = infer("x = 1..10\nb = x.size")
-    assert_equal "Integer | Float | nil", types["b"]
+    assert_equal 'Integer | Float | nil', types['b']
   end
 
   # ============================================

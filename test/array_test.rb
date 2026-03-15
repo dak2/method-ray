@@ -10,18 +10,18 @@ class ArrayTest < Minitest::Test
   # ============================================
 
   def test_nested_array_integer
-    assert_type "x = [[1, 2], [3]]", "x", "Array[Array[Integer]]"
+    assert_type 'x = [[1, 2], [3]]', 'x', 'Array[Array[Integer]]'
   end
 
   def test_deeply_nested_array
-    assert_type "x = [[[1]]]", "x", "Array[Array[Array[Integer]]]"
+    assert_type 'x = [[[1]]]', 'x', 'Array[Array[Array[Integer]]]'
   end
 
   def test_nested_array_mixed
     types = infer('x = [[1], ["a"]]')
     assert_includes(
-      ["Array[Array[Integer] | Array[String]]", "Array[Array[String] | Array[Integer]]"],
-      types["x"]
+      ['Array[Array[Integer] | Array[String]]', 'Array[Array[String] | Array[Integer]]'],
+      types['x']
     )
   end
 
