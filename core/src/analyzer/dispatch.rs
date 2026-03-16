@@ -88,6 +88,8 @@ pub enum NeedsChildKind<'a> {
         block: Option<Node<'a>>,
         /// Arguments to the method call
         arguments: Vec<Node<'a>>,
+        /// Whether this is a safe navigation call (`&.`)
+        safe_navigation: bool,
     },
     /// Implicit self method call: method call without explicit receiver (implicit self)
     ImplicitSelfCall {
@@ -215,6 +217,7 @@ pub fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<NeedsCh
                 location,
                 block,
                 arguments,
+                safe_navigation: call_node.is_safe_navigation(),
             });
         } else {
             // No receiver: implicit self method call (e.g., `name`, `puts "hello"`)
@@ -296,11 +299,12 @@ pub(crate) fn process_needs_child(
             location,
             block,
             arguments,
+            safe_navigation,
         } => {
             let recv_vtx = super::install::install_node(genv, lenv, changes, source, &receiver)?;
             process_method_call_common(
                 genv, lenv, changes, source,
-                MethodCallContext { recv_vtx, method_name, location, block, arguments },
+                MethodCallContext { recv_vtx, method_name, location, block, arguments, safe_navigation },
             )
         }
         NeedsChildKind::ImplicitSelfCall {
@@ -317,7 +321,8 @@ pub(crate) fn process_needs_child(
             };
             process_method_call_common(
                 genv, lenv, changes, source,
-                MethodCallContext { recv_vtx, method_name, location, block, arguments },
+                // Implicit self calls cannot use safe navigation (`&.` requires explicit receiver)
+                MethodCallContext { recv_vtx, method_name, location, block, arguments, safe_navigation: false },
             )
         }
         NeedsChildKind::AttrDeclaration { kind, attr_names } => {
@@ -360,6 +365,7 @@ struct MethodCallContext<'a> {
     location: SourceLocation,
     block: Option<Node<'a>>,
     arguments: Vec<Node<'a>>,
+    safe_navigation: bool,
 }
 
 /// MethodCall / ImplicitSelfCall common processing:
@@ -377,6 +383,7 @@ fn process_method_call_common<'a>(
         location,
         block,
         arguments,
+        safe_navigation,
     } = ctx;
     if method_name == "!" {
         return Some(super::operators::process_not_operator(genv));
@@ -411,6 +418,7 @@ fn process_method_call_common<'a>(
         positional_arg_vtxs,
         kwarg_vtxs,
         location,
+        safe_navigation,
     ))
 }
 
@@ -422,8 +430,9 @@ fn finish_method_call(
     arg_vtxs: Vec<VertexId>,
     kwarg_vtxs: Option<HashMap<String, VertexId>>,
     location: SourceLocation,
+    safe_navigation: bool,
 ) -> VertexId {
-    install_method_call(genv, recv_vtx, method_name, arg_vtxs, kwarg_vtxs, Some(location))
+    install_method_call(genv, recv_vtx, method_name, arg_vtxs, kwarg_vtxs, Some(location), safe_navigation)
 }
 
 #[cfg(test)]
@@ -1397,5 +1406,83 @@ User.new.foo
             .expect("User#foo should be resolved via include");
         let ret_vtx = info.return_vertex.unwrap();
         assert_eq!(get_type_show(&genv, ret_vtx), "String");
+    }
+
+    // === Safe navigation operator (`&.`) tests ===
+
+    #[test]
+    fn test_safe_navigation_basic() {
+        let source = r#"
+class User
+  def name
+    "Alice"
+  end
+end
+
+User.new&.name
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "obj&.name should not produce type errors: {:?}",
+            genv.type_errors
+        );
+    }
+
+    #[test]
+    fn test_safe_navigation_undefined_method() {
+        let source = r#"
+class User
+  def name
+    "Alice"
+  end
+end
+
+User.new&.undefined_method
+"#;
+        let genv = analyze(source);
+        assert!(
+            !genv.type_errors.is_empty(),
+            "obj&.undefined_method should produce a type error"
+        );
+    }
+
+    #[test]
+    fn test_safe_navigation_nil_receiver() {
+        let source = r#"
+x = nil
+x&.foo
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "nil&.foo should not produce type errors: {:?}",
+            genv.type_errors
+        );
+    }
+
+    #[test]
+    fn test_safe_navigation_chain() {
+        let source = r#"
+class Profile
+  def name
+    "Alice"
+  end
+end
+
+class User
+  def profile
+    Profile.new
+  end
+end
+
+User.new&.profile&.name
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "chained safe navigation should not produce type errors: {:?}",
+            genv.type_errors
+        );
     }
 }
