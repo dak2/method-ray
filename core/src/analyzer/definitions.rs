@@ -27,6 +27,17 @@ pub(crate) fn process_class_node(
 ) -> Option<VertexId> {
     let class_name = extract_class_name(class_node);
     let superclass = class_node.superclass().and_then(|sup| extract_constant_path(&sup));
+
+    // Warn if superclass is a dynamic expression (not a constant path)
+    // TODO: Replace eprintln! with structured diagnostic (record_type_error or warning)
+    //       so this is visible in LSP mode and includes source location.
+    if class_node.superclass().is_some() && superclass.is_none() {
+        eprintln!(
+            "[methodray] warning: dynamic superclass expression in class {}; inheritance will be ignored",
+            class_name
+        );
+    }
+
     install_class(genv, class_name, superclass.as_deref());
 
     if let Some(body) = class_node.body() {

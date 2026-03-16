@@ -1410,6 +1410,82 @@ User.new.foo
 
     // === Safe navigation operator (`&.`) tests ===
 
+    // === Inheritance chain tests ===
+
+    #[test]
+    fn test_inheritance_basic() {
+        let source = r#"
+class Animal
+  def speak
+    "..."
+  end
+end
+
+class Dog < Animal
+end
+
+Dog.new.speak
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "Dog.new.speak should resolve via Animal#speak: {:?}",
+            genv.type_errors
+        );
+    }
+
+    #[test]
+    fn test_inheritance_multi_level() {
+        let source = r#"
+class Animal
+  def speak
+    "..."
+  end
+end
+
+class Dog < Animal
+end
+
+class Puppy < Dog
+end
+
+Puppy.new.speak
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "Puppy.new.speak should resolve via Animal#speak: {:?}",
+            genv.type_errors
+        );
+    }
+
+    #[test]
+    fn test_inheritance_override() {
+        let source = r#"
+class Animal
+  def speak
+    "generic"
+  end
+end
+
+class Dog < Animal
+  def speak
+    42
+  end
+end
+
+Dog.new.speak
+"#;
+        let genv = analyze(source);
+        assert!(genv.type_errors.is_empty());
+
+        let info = genv
+            .resolve_method(&Type::instance("Dog"), "speak")
+            .expect("Dog#speak should be resolved");
+        let ret_vtx = info.return_vertex.unwrap();
+        assert_eq!(get_type_show(&genv, ret_vtx), "Integer");
+    }
+
     #[test]
     fn test_safe_navigation_basic() {
         let source = r#"

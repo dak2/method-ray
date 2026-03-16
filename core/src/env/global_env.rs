@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use crate::env::box_manager::BoxManager;
-use crate::env::method_registry::{MethodInfo, MethodRegistry};
+use crate::env::method_registry::{MethodInfo, MethodRegistry, ResolutionContext};
 use crate::env::scope::{Scope, ScopeId, ScopeKind, ScopeManager};
 use crate::env::type_error::TypeError;
 use crate::env::vertex_manager::VertexManager;
@@ -41,6 +41,8 @@ pub struct GlobalEnv {
     /// Module inclusions: class_name → Vec<module_name> (in include order)
     module_inclusions: HashMap<String, Vec<String>>,
 
+    /// Superclass map: child_class → parent_class
+    superclass_map: HashMap<String, String>,
 }
 
 impl GlobalEnv {
@@ -52,6 +54,7 @@ impl GlobalEnv {
             type_errors: Vec::new(),
             scope_manager: ScopeManager::new(),
             module_inclusions: HashMap::new(),
+            superclass_map: HashMap::new(),
         }
     }
 
@@ -163,8 +166,12 @@ impl GlobalEnv {
 
     /// Resolve method
     pub fn resolve_method(&self, recv_ty: &Type, method_name: &str) -> Option<&MethodInfo> {
+        let ctx = ResolutionContext {
+            inclusions: &self.module_inclusions,
+            superclass_map: &self.superclass_map,
+        };
         self.method_registry
-            .resolve(recv_ty, method_name, &self.module_inclusions)
+            .resolve(recv_ty, method_name, &ctx)
     }
 
     /// Record that a class includes a module
@@ -247,6 +254,30 @@ impl GlobalEnv {
         });
         self.scope_manager.enter_scope(scope_id);
         self.register_constant_in_parent(scope_id, &name);
+
+        // Record superclass relationship in superclass_map
+        if let Some(parent) = superclass {
+            let child_name = self.scope_manager.current_qualified_name()
+                .unwrap_or_else(|| name.clone());
+            // NOTE: lookup_constant may fail for cross-namespace inheritance
+            // (e.g., `class Dog < Animal` inside `module Service` where Animal is `Api::Animal`).
+            // In that case, the raw name is used. This is a known limitation (see design doc Q2).
+            let parent_name = self.scope_manager.lookup_constant(parent)
+                .unwrap_or_else(|| parent.to_string());
+
+            // Detect superclass mismatch (Ruby raises TypeError for this at runtime)
+            if let Some(existing) = self.superclass_map.get(&child_name) {
+                if *existing != parent_name {
+                    eprintln!(
+                        "[methodray] warning: superclass mismatch for {}: previously {}, now {}",
+                        child_name, existing, parent_name
+                    );
+                }
+            }
+
+            self.superclass_map.insert(child_name, parent_name);
+        }
+
         scope_id
     }
 
