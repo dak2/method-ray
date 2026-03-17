@@ -43,6 +43,9 @@ pub struct GlobalEnv {
 
     /// Superclass map: child_class → parent_class
     superclass_map: HashMap<String, String>,
+
+    /// Module extensions: class_name → Vec<module_name> (in extend order)
+    module_extensions: HashMap<String, Vec<String>>,
 }
 
 impl GlobalEnv {
@@ -55,6 +58,7 @@ impl GlobalEnv {
             scope_manager: ScopeManager::new(),
             module_inclusions: HashMap::new(),
             superclass_map: HashMap::new(),
+            module_extensions: HashMap::new(),
         }
     }
 
@@ -169,6 +173,7 @@ impl GlobalEnv {
         let ctx = ResolutionContext {
             inclusions: &self.module_inclusions,
             superclass_map: &self.superclass_map,
+            extensions: &self.module_extensions,
         };
         self.method_registry
             .resolve(recv_ty, method_name, &ctx)
@@ -176,8 +181,20 @@ impl GlobalEnv {
 
     /// Record that a class includes a module
     pub fn record_include(&mut self, class_name: &str, module_name: &str) {
-        self.module_inclusions
-            .entry(class_name.to_string())
+        Self::record_mixin(&mut self.module_inclusions, class_name, module_name);
+    }
+
+    /// Record that a class extends a module
+    pub fn record_extend(&mut self, class_name: &str, module_name: &str) {
+        Self::record_mixin(&mut self.module_extensions, class_name, module_name);
+    }
+
+    fn record_mixin(
+        map: &mut HashMap<String, Vec<String>>,
+        class_name: &str,
+        module_name: &str,
+    ) {
+        map.entry(class_name.to_string())
             .or_default()
             .push(module_name.to_string());
     }

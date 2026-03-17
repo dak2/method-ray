@@ -9,10 +9,11 @@ use smallvec::SmallVec;
 const OBJECT_CLASS: &str = "Object";
 const KERNEL_MODULE: &str = "Kernel";
 
-/// Aggregated context for method resolution (inclusions, superclass chain)
+/// Aggregated context for method resolution (inclusions, superclass chain, extensions)
 pub struct ResolutionContext<'a> {
     pub inclusions: &'a HashMap<String, Vec<String>>,
     pub superclass_map: &'a HashMap<String, String>,
+    pub extensions: &'a HashMap<String, Vec<String>>,
 }
 
 impl<'a> ResolutionContext<'a> {
@@ -26,6 +27,7 @@ impl<'a> ResolutionContext<'a> {
         Self {
             inclusions: &EMPTY_VEC_MAP,
             superclass_map: &EMPTY_STRING_MAP,
+            extensions: &EMPTY_VEC_MAP,
         }
     }
 }
@@ -122,6 +124,7 @@ impl MethodRegistry {
     /// 4. Superclass chain: for each parent, add parent type + its included modules
     /// 5. Object (for Instance/Generic types only)
     /// 6. Kernel (for Instance/Generic types only)
+    /// 7. Extended modules (for Singleton types only, last extended has highest priority)
     fn fallback_chain(
         recv_ty: &Type,
         ctx: &ResolutionContext,
@@ -158,6 +161,11 @@ impl MethodRegistry {
             chain.push(Type::instance(KERNEL_MODULE));
         }
 
+        // Singleton type: search extended modules (extend makes module methods available as class methods)
+        if let Type::Singleton { name } = recv_ty {
+            Self::add_included_modules(&mut chain, name.full_name(), ctx.extensions);
+        }
+
         chain
     }
 
@@ -165,7 +173,8 @@ impl MethodRegistry {
     ///
     /// Searches the MRO fallback chain: exact type → base class (for generics)
     /// → included modules → superclass chain → Object → Kernel.
-    /// For non-instance types (Singleton, Nil, Union, Bot), only exact match is attempted.
+    /// For Singleton types, also searches extended modules after exact match.
+    /// For other non-instance types (Nil, Union, Bot), only exact match is attempted.
     pub fn resolve(
         &self,
         recv_ty: &Type,
@@ -341,6 +350,7 @@ mod tests {
         let ctx = ResolutionContext {
             inclusions: &inclusions,
             superclass_map: &HashMap::new(),
+            extensions: &HashMap::new(),
         };
 
         let info = registry.resolve(&Type::instance("User"), "greet", &ctx).unwrap();
@@ -359,6 +369,7 @@ mod tests {
         let ctx = ResolutionContext {
             inclusions: &inclusions,
             superclass_map: &HashMap::new(),
+            extensions: &HashMap::new(),
         };
 
         let info = registry.resolve(&Type::instance("User"), "foo", &ctx).unwrap();
@@ -377,6 +388,7 @@ mod tests {
         let ctx = ResolutionContext {
             inclusions: &inclusions,
             superclass_map: &HashMap::new(),
+            extensions: &HashMap::new(),
         };
 
         let info = registry.resolve(&Type::instance("User"), "greet", &ctx).unwrap();
@@ -395,6 +407,7 @@ mod tests {
         let ctx = ResolutionContext {
             inclusions: &inclusions,
             superclass_map: &HashMap::new(),
+            extensions: &HashMap::new(),
         };
 
         let info = registry.resolve(&Type::instance("User"), "foo", &ctx).unwrap();
@@ -412,6 +425,7 @@ mod tests {
         let ctx = ResolutionContext {
             inclusions: &inclusions,
             superclass_map: &HashMap::new(),
+            extensions: &HashMap::new(),
         };
 
         assert!(registry.resolve(&Type::singleton("User"), "greet", &ctx).is_none());
@@ -430,6 +444,7 @@ mod tests {
         let ctx = ResolutionContext {
             inclusions: &HashMap::new(),
             superclass_map: &superclass_map,
+            extensions: &HashMap::new(),
         };
 
         let info = registry.resolve(&Type::instance("Dog"), "speak", &ctx).unwrap();
@@ -448,6 +463,7 @@ mod tests {
         let ctx = ResolutionContext {
             inclusions: &HashMap::new(),
             superclass_map: &superclass_map,
+            extensions: &HashMap::new(),
         };
 
         let info = registry.resolve(&Type::instance("Puppy"), "breathe", &ctx).unwrap();
@@ -466,6 +482,7 @@ mod tests {
         let ctx = ResolutionContext {
             inclusions: &HashMap::new(),
             superclass_map: &superclass_map,
+            extensions: &HashMap::new(),
         };
 
         let info = registry.resolve(&Type::instance("Dog"), "speak", &ctx).unwrap();
@@ -485,6 +502,7 @@ mod tests {
         let ctx = ResolutionContext {
             inclusions: &inclusions,
             superclass_map: &superclass_map,
+            extensions: &HashMap::new(),
         };
 
         let info = registry.resolve(&Type::instance("Dog"), "greet", &ctx).unwrap();
@@ -502,9 +520,85 @@ mod tests {
         let ctx = ResolutionContext {
             inclusions: &HashMap::new(),
             superclass_map: &superclass_map,
+            extensions: &HashMap::new(),
         };
 
         // Should not hang; just returns None
         assert!(registry.resolve(&Type::instance("A"), "missing", &ctx).is_none());
+    }
+
+    // --- Extend (module extension) tests ---
+
+    #[test]
+    fn test_resolve_with_extend() {
+        let mut registry = MethodRegistry::new();
+        registry.register(Type::instance("ClassMethods"), "find", Type::string());
+
+        let mut extensions = HashMap::new();
+        extensions.insert("User".to_string(), vec!["ClassMethods".to_string()]);
+        let ctx = ResolutionContext {
+            inclusions: &HashMap::new(),
+            superclass_map: &HashMap::new(),
+            extensions: &extensions,
+        };
+
+        let info = registry.resolve(&Type::singleton("User"), "find", &ctx).unwrap();
+        assert_eq!(info.return_type.base_class_name(), Some("String"));
+    }
+
+    #[test]
+    fn test_resolve_extend_order() {
+        // extend A; extend B → B has higher priority (last extended wins)
+        let mut registry = MethodRegistry::new();
+        registry.register(Type::instance("A"), "foo", Type::string());
+        registry.register(Type::instance("B"), "foo", Type::integer());
+
+        let mut extensions = HashMap::new();
+        extensions.insert("User".to_string(), vec!["A".to_string(), "B".to_string()]);
+        let ctx = ResolutionContext {
+            inclusions: &HashMap::new(),
+            superclass_map: &HashMap::new(),
+            extensions: &extensions,
+        };
+
+        let info = registry.resolve(&Type::singleton("User"), "foo", &ctx).unwrap();
+        // B is extended last → higher priority
+        assert_eq!(info.return_type.base_class_name(), Some("Integer"));
+    }
+
+    #[test]
+    fn test_resolve_extend_does_not_affect_instance() {
+        let mut registry = MethodRegistry::new();
+        registry.register(Type::instance("ClassMethods"), "find", Type::string());
+
+        let mut extensions = HashMap::new();
+        extensions.insert("User".to_string(), vec!["ClassMethods".to_string()]);
+        let ctx = ResolutionContext {
+            inclusions: &HashMap::new(),
+            superclass_map: &HashMap::new(),
+            extensions: &extensions,
+        };
+
+        // Instance type should NOT resolve extended module methods
+        assert!(registry.resolve(&Type::instance("User"), "find", &ctx).is_none());
+    }
+
+    #[test]
+    fn test_resolve_def_self_over_extend() {
+        let mut registry = MethodRegistry::new();
+        registry.register(Type::instance("ClassMethods"), "find", Type::string());
+        registry.register(Type::singleton("User"), "find", Type::integer());
+
+        let mut extensions = HashMap::new();
+        extensions.insert("User".to_string(), vec!["ClassMethods".to_string()]);
+        let ctx = ResolutionContext {
+            inclusions: &HashMap::new(),
+            superclass_map: &HashMap::new(),
+            extensions: &extensions,
+        };
+
+        let info = registry.resolve(&Type::singleton("User"), "find", &ctx).unwrap();
+        // def self.find (exact match) takes priority over extend
+        assert_eq!(info.return_type.base_class_name(), Some("Integer"));
     }
 }
