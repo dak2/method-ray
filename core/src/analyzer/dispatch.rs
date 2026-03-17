@@ -103,10 +103,18 @@ pub enum NeedsChildKind<'a> {
         kind: AttrKind,
         attr_names: Vec<String>,
     },
-    /// include declaration: `include Greetable, Enumerable`
-    IncludeDeclaration {
+    /// include / extend declaration: `include Greetable`, `extend ClassMethods`
+    ModuleMixinDeclaration {
         module_names: Vec<String>,
+        kind: MixinKind,
     },
+}
+
+/// Kind of module mixin (include or extend)
+#[derive(Debug, Clone, Copy)]
+pub enum MixinKind {
+    Include,
+    Extend,
 }
 
 /// First pass: check if node can be handled immediately without child processing
@@ -174,6 +182,19 @@ fn extract_symbol_names(call_node: &ruby_prism::CallNode) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Extract module names from include/extend arguments
+fn extract_mixin_module_names(call_node: &ruby_prism::CallNode) -> Vec<String> {
+    call_node
+        .arguments()
+        .map(|args| {
+            args.arguments()
+                .iter()
+                .filter_map(|arg| super::definitions::extract_constant_path(&arg))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Check if node needs child processing
 pub fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<NeedsChildKind<'a>> {
     // Instance variable write: @name = value
@@ -235,21 +256,16 @@ pub fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<NeedsCh
                 return None;
             }
 
-            if method_name == "include" {
-                let module_names: Vec<String> = call_node
-                    .arguments()
-                    .map(|args| {
-                        args.arguments()
-                            .iter()
-                            .filter_map(|arg| {
-                                super::definitions::extract_constant_path(&arg)
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default();
+            let mixin_kind = match method_name.as_str() {
+                "include" => Some(MixinKind::Include),
+                "extend" => Some(MixinKind::Extend),
+                _ => None,
+            };
 
+            if let Some(kind) = mixin_kind {
+                let module_names = extract_mixin_module_names(&call_node);
                 if !module_names.is_empty() {
-                    return Some(NeedsChildKind::IncludeDeclaration { module_names });
+                    return Some(NeedsChildKind::ModuleMixinDeclaration { module_names, kind });
                 }
                 return None;
             }
@@ -329,12 +345,15 @@ pub(crate) fn process_needs_child(
             super::attributes::process_attr_declaration(genv, kind, attr_names);
             None
         }
-        NeedsChildKind::IncludeDeclaration { module_names } => {
+        NeedsChildKind::ModuleMixinDeclaration { module_names, kind } => {
             if let Some(class_name) = genv.scope_manager.current_qualified_name() {
-                // Ruby processes `include A, B` right-to-left (B first, then A on top),
+                // Ruby processes `include/extend A, B` right-to-left (B first, then A on top),
                 // so A ends up with higher MRO priority. Reverse to match this behavior.
                 for module_name in module_names.iter().rev() {
-                    genv.record_include(&class_name, module_name);
+                    match kind {
+                        MixinKind::Include => genv.record_include(&class_name, module_name),
+                        MixinKind::Extend => genv.record_extend(&class_name, module_name),
+                    }
                 }
             }
             None
@@ -1560,5 +1579,174 @@ User.new&.profile&.name
             "chained safe navigation should not produce type errors: {:?}",
             genv.type_errors
         );
+    }
+
+    // === Extend tests ===
+
+    #[test]
+    fn test_extend_basic() {
+        let source = r#"
+module ClassMethods
+  def find(id)
+    "found"
+  end
+end
+
+class User
+  extend ClassMethods
+end
+
+User.find(1)
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "User.find should resolve via extend ClassMethods: {:?}",
+            genv.type_errors
+        );
+    }
+
+    #[test]
+    fn test_extend_does_not_affect_instance() {
+        let source = r#"
+module ClassMethods
+  def find(id)
+    "found"
+  end
+end
+
+class User
+  extend ClassMethods
+end
+
+User.new.find(1)
+"#;
+        let genv = analyze(source);
+        // extend does not add instance methods, so User.new.find should error
+        assert!(!genv.type_errors.is_empty());
+    }
+
+    #[test]
+    fn test_extend_qualified_module() {
+        let source = r#"
+module Api
+  module ClassHelpers
+    def search(query)
+      "results"
+    end
+  end
+end
+
+class User
+  extend Api::ClassHelpers
+end
+
+User.search("test")
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "User.search should resolve via extend Api::ClassHelpers: {:?}",
+            genv.type_errors
+        );
+    }
+
+    #[test]
+    fn test_extend_multiple_modules() {
+        let source = r#"
+module A
+  def a_method
+    "a"
+  end
+end
+
+module B
+  def b_method
+    42
+  end
+end
+
+class User
+  extend A, B
+end
+
+User.a_method
+User.b_method
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "User.a_method and User.b_method should resolve via extend: {:?}",
+            genv.type_errors
+        );
+    }
+
+    #[test]
+    fn test_extend_simultaneous_order() {
+        // extend A, B — A should have higher priority (Ruby processes right-to-left)
+        let source = r#"
+module A
+  def foo
+    "from_a"
+  end
+end
+
+module B
+  def foo
+    42
+  end
+end
+
+class User
+  extend A, B
+end
+
+User.foo
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "User.foo should resolve via extend A, B: {:?}",
+            genv.type_errors
+        );
+    }
+
+    #[test]
+    fn test_extend_def_self_takes_priority() {
+        let source = r#"
+module ClassMethods
+  def find(id)
+    "found"
+  end
+end
+
+class User
+  extend ClassMethods
+
+  def self.find(id)
+    42
+  end
+end
+
+User.find(1)
+"#;
+        let genv = analyze(source);
+        assert!(
+            genv.type_errors.is_empty(),
+            "def self.find should take priority over extend: {:?}",
+            genv.type_errors
+        );
+    }
+
+    #[test]
+    fn test_extend_unknown_module_no_panic() {
+        let source = r#"
+class User
+  extend UnknownModule
+end
+"#;
+        let genv = analyze(source);
+        // Should not panic; unknown module is recorded but no methods are resolved
+        assert!(genv.type_errors.is_empty());
     }
 }
