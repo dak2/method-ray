@@ -81,9 +81,49 @@ class BlockTest < Minitest::Test
     assert_no_check_errors(source)
   end
 
+  def test_block_parameter_from_each_char
+    source = <<~RUBY
+      class Foo
+        def bar
+          "hello".each_char { |c| c.upcase }
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
   # ============================================
   # Error Detection
   # ============================================
+
+  def test_block_parameter_from_each_char_type_error
+    source = <<~RUBY
+      class Foo
+        def bar
+          "hello".each_char { |c| c.even? }
+        end
+      end
+    RUBY
+
+    assert_check_error(source, method_name: 'even?', receiver_type: 'String')
+  end
+
+  def test_block_body_does_not_affect_method_return
+    source = <<~RUBY
+      class Foo
+        def bar
+          [1, 2].each { |x| "string" }
+        end
+
+        def baz
+          self.bar.upcase
+        end
+      end
+    RUBY
+
+    assert_check_error(source, method_name: 'upcase', receiver_type: 'self')
+  end
 
   def test_block_outer_variable_type_error
     source = <<~RUBY
