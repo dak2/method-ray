@@ -121,6 +121,56 @@ class IncludeTest < Minitest::Test
   end
 
   # ============================================
+  # Type Inference
+  # ============================================
+
+  def test_include_simultaneous_mro_order
+    source = <<~RUBY
+      module A
+        def foo
+          "from A"
+        end
+      end
+
+      module B
+        def foo
+          42
+        end
+      end
+
+      class User
+        include A, B
+      end
+
+      x = User.new.foo
+    RUBY
+
+    assert_type(source, 'x', 'String')
+  end
+
+  def test_include_class_method_takes_priority
+    source = <<~RUBY
+      module Greetable
+        def greet
+          "Hello from module!"
+        end
+      end
+
+      class User
+        include Greetable
+
+        def greet
+          42
+        end
+      end
+
+      x = User.new.greet
+    RUBY
+
+    assert_type(source, 'x', 'Integer')
+  end
+
+  # ============================================
   # Error Detection
   # ============================================
 

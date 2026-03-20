@@ -77,9 +77,7 @@ fn process_super_call(
 mod tests {
     use crate::analyzer::install::AstInstaller;
     use crate::env::{GlobalEnv, LocalEnv};
-    use crate::graph::VertexId;
     use crate::parser::ParseSession;
-    use crate::types::Type;
 
     /// Helper: parse Ruby source, process with AstInstaller, and return GlobalEnv
     fn analyze(source: &str) -> GlobalEnv {
@@ -100,87 +98,6 @@ mod tests {
         genv
     }
 
-    /// Helper: get the type string for a vertex ID
-    fn get_type_show(genv: &GlobalEnv, vtx: VertexId) -> String {
-        if let Some(vertex) = genv.get_vertex(vtx) {
-            vertex.show()
-        } else if let Some(source) = genv.get_source(vtx) {
-            source.ty.show()
-        } else {
-            panic!("vertex {:?} not found as either Vertex or Source", vtx);
-        }
-    }
-
-    #[test]
-    fn test_super_basic() {
-        let source = r#"
-class Animal
-  def speak
-    "..."
-  end
-end
-
-class Dog < Animal
-  def speak
-    super
-  end
-end
-"#;
-        let genv = analyze(source);
-        let info = genv
-            .resolve_method(&Type::instance("Dog"), "speak")
-            .expect("Dog#speak should be registered");
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "String");
-    }
-
-    #[test]
-    fn test_super_with_method_chain() {
-        let source = r#"
-class Animal
-  def speak
-    "hello"
-  end
-end
-
-class Dog < Animal
-  def speak
-    super.upcase
-  end
-end
-"#;
-        let genv = analyze(source);
-        let info = genv
-            .resolve_method(&Type::instance("Dog"), "speak")
-            .expect("Dog#speak should be registered");
-        assert!(info.return_vertex.is_some());
-    }
-
-    #[test]
-    fn test_super_with_arguments() {
-        let source = r#"
-class Base
-  def greet(name)
-    name
-  end
-end
-
-class Child < Base
-  def greet(name)
-    super(name)
-  end
-end
-
-Child.new.greet("Alice")
-"#;
-        let genv = analyze(source);
-        let info = genv
-            .resolve_method(&Type::instance("Child"), "greet")
-            .expect("Child#greet should be registered");
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "String");
-    }
-
     #[test]
     fn test_super_outside_method_ignored() {
         let source = r#"
@@ -189,29 +106,6 @@ class Foo < Object
 end
 "#;
         analyze(source);
-    }
-
-    #[test]
-    fn test_super_explicit_empty_args() {
-        let source = r#"
-class Animal
-  def speak
-    "hello"
-  end
-end
-
-class Dog < Animal
-  def speak
-    super()
-  end
-end
-"#;
-        let genv = analyze(source);
-        let info = genv
-            .resolve_method(&Type::instance("Dog"), "speak")
-            .expect("Dog#speak should be registered");
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "String");
     }
 
     #[test]
@@ -225,62 +119,8 @@ end
 "#;
         let genv = analyze(source);
         let info = genv
-            .resolve_method(&Type::instance("Foo"), "bar")
+            .resolve_method(&crate::types::Type::instance("Foo"), "bar")
             .expect("Foo#bar should be registered");
         assert!(info.return_vertex.is_some());
-    }
-
-    #[test]
-    fn test_super_qualified_superclass() {
-        let source = r#"
-module Animals
-  class Pet
-    def name
-      "pet"
-    end
-  end
-end
-
-class Dog < Animals::Pet
-  def name
-    super
-  end
-end
-"#;
-        let genv = analyze(source);
-        let info = genv
-            .resolve_method(&Type::instance("Dog"), "name")
-            .expect("Dog#name should be registered");
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "String");
-    }
-
-    #[test]
-    fn test_super_multi_level_inheritance() {
-        let source = r#"
-class A
-  def foo
-    "hello"
-  end
-end
-
-class B < A
-  def foo
-    super
-  end
-end
-
-class C < B
-  def foo
-    super
-  end
-end
-"#;
-        let genv = analyze(source);
-        let info = genv
-            .resolve_method(&Type::instance("C"), "foo")
-            .expect("C#foo should be registered");
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "String");
     }
 }

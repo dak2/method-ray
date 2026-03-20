@@ -96,6 +96,40 @@ class AttrTest < Minitest::Test
     assert_no_check_errors(source)
   end
 
+  def test_attr_writer_setter_only
+    source = <<~RUBY
+      class User
+        attr_writer :name
+
+        def initialize
+          @name = "Alice"
+        end
+      end
+
+      user = User.new
+      user.name = "Bob"
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_attr_writer_getter_is_undefined
+    source = <<~RUBY
+      class User
+        attr_writer :name
+
+        def initialize
+          @name = "Alice"
+        end
+      end
+
+      user = User.new
+      user.name
+    RUBY
+
+    assert_check_error(source, method_name: 'name', receiver_type: 'User')
+  end
+
   # ============================================
   # Error Detection
   # ============================================
