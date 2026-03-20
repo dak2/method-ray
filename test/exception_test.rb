@@ -96,9 +96,107 @@ class ExceptionTest < Minitest::Test
     assert_includes type_str, 'String'
   end
 
+  def test_nested_begin_rescue_union_type
+    source = <<~RUBY
+      x = begin
+            begin
+              "inner"
+            rescue
+              42
+            end
+          rescue
+            :outer
+          end
+    RUBY
+
+    types = infer(source)
+    type_str = types['x']
+    assert_includes type_str, 'Integer'
+    assert_includes type_str, 'String'
+    assert_includes type_str, 'Symbol'
+  end
+
+  def test_rescue_modifier_same_type
+    source = <<~RUBY
+      x = "hello" rescue "world"
+    RUBY
+
+    assert_type source, 'x', 'String'
+  end
+
+  def test_empty_rescue_body_is_nil
+    source = <<~RUBY
+      x = begin
+            "hello"
+          rescue
+          end
+    RUBY
+
+    types = infer(source)
+    type_str = types['x']
+    assert_includes type_str, 'String'
+    assert_includes type_str, 'nil'
+  end
+
+  def test_rescue_qualified_exception_class
+    source = <<~RUBY
+      x = begin
+            "hello"
+          rescue Net::HTTPError => e
+            e
+          end
+    RUBY
+
+    types = infer(source)
+    type_str = types['x']
+    assert_includes type_str, 'Net::HTTPError'
+  end
+
   # ============================================
   # No Error (check CLI)
   # ============================================
+
+  def test_begin_ensure_only_no_error
+    source = <<~RUBY
+      class Foo
+        def bar
+          begin
+            "hello"
+          ensure
+            "cleanup".upcase
+          end
+        end
+
+        def baz
+          self.bar.upcase
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_ensure_side_effects_no_error
+    source = <<~RUBY
+      class Foo
+        def bar
+          begin
+            "hello"
+          rescue
+            "fallback"
+          ensure
+            x = "side_effect"
+          end
+        end
+
+        def baz
+          self.bar.upcase
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
 
   def test_begin_rescue_no_false_positive
     source = <<~RUBY
@@ -136,10 +234,6 @@ class ExceptionTest < Minitest::Test
     assert_no_check_errors(source)
   end
 
-  # ============================================
-  # Error Detection (check CLI)
-  # ============================================
-
   def test_rescue_with_specific_exception_returns_string
     source = <<~RUBY
       class Catcher
@@ -159,6 +253,10 @@ class ExceptionTest < Minitest::Test
 
     assert_no_check_errors(source)
   end
+
+  # ============================================
+  # Error Detection (check CLI)
+  # ============================================
 
   def test_rescue_branch_type_error
     source = <<~RUBY
