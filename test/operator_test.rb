@@ -39,6 +39,29 @@ class OperatorTest < Minitest::Test
     assert_type source, 'x', 'Integer'
   end
 
+  def test_nested_logical_operators_union_type
+    source = <<~RUBY
+      x = 1 && "a" || :b
+    RUBY
+
+    types = infer(source)
+    type_str = types['x']
+    assert_includes type_str, 'Integer'
+    assert_includes type_str, 'String'
+    assert_includes type_str, 'Symbol'
+  end
+
+  def test_not_nil_returns_boolean
+    source = <<~RUBY
+      x = !nil
+    RUBY
+
+    types = infer(source)
+    type_str = types['x']
+    assert_includes type_str, 'TrueClass'
+    assert_includes type_str, 'FalseClass'
+  end
+
   # ============================================
   # No Error (check CLI)
   # ============================================
