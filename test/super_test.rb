@@ -95,6 +95,48 @@ class SuperTest < Minitest::Test
     assert_no_check_errors(source)
   end
 
+  def test_super_explicit_empty_args
+    source = <<~RUBY
+      class Animal
+        def speak
+          "hello"
+        end
+      end
+
+      class Dog < Animal
+        def speak
+          super()
+        end
+      end
+
+      Dog.new.speak
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_super_qualified_superclass
+    source = <<~RUBY
+      module Animals
+        class Pet
+          def name
+            "pet"
+          end
+        end
+      end
+
+      class Dog < Animals::Pet
+        def name
+          super
+        end
+      end
+
+      Dog.new.name
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
   # ============================================
   # Error Detection
   # ============================================

@@ -73,6 +73,56 @@ class ExtendTest < Minitest::Test
   end
 
   # ============================================
+  # Type Inference
+  # ============================================
+
+  def test_extend_simultaneous_mro_order
+    source = <<~RUBY
+      module A
+        def foo
+          "from A"
+        end
+      end
+
+      module B
+        def foo
+          42
+        end
+      end
+
+      class User
+        extend A, B
+      end
+
+      x = User.foo
+    RUBY
+
+    assert_type(source, 'x', 'String')
+  end
+
+  def test_extend_def_self_takes_priority
+    source = <<~RUBY
+      module ClassMethods
+        def find(id)
+          "found"
+        end
+      end
+
+      class User
+        extend ClassMethods
+
+        def self.find(id)
+          42
+        end
+      end
+
+      x = User.find(1)
+    RUBY
+
+    assert_type(source, 'x', 'Integer')
+  end
+
+  # ============================================
   # Error Detection
   # ============================================
 
