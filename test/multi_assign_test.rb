@@ -68,6 +68,37 @@ class MultiAssignTest < Minitest::Test
     assert_equal 'nil', types['b']
   end
 
+  def test_splat_mixed_types
+    types = infer('first, *rest = 1, "hello", :sym')
+    assert_equal 'Integer', types['first']
+    assert_equal 'Array[String | Symbol]', types['rest']
+  end
+
+  def test_splat_only
+    types = infer('*all = 1, 2, 3')
+    assert_equal 'Array[Integer]', types['all']
+  end
+
+  def test_array_literal_rhs
+    types = infer('a, b = [1, "hi"]')
+    assert_equal 'Integer', types['a']
+    assert_equal 'String', types['b']
+  end
+
+  def test_rights_exceed_rhs
+    types = infer('*rest, x, y, z = "a", 1')
+    assert_equal 'Array[untyped]', types['rest']
+    assert_equal 'nil', types['x']
+    assert_equal 'String', types['y']
+    assert_equal 'Integer', types['z']
+  end
+
+  def test_rhs_longer_than_lhs
+    types = infer('a, b = 1, 2, 3, 4')
+    assert_equal 'Integer', types['a']
+    assert_equal 'Integer', types['b']
+  end
+
   # ============================================
   # Error Detection
   # ============================================
