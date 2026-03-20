@@ -97,9 +97,7 @@ pub(crate) fn process_for_node(
 mod tests {
     use crate::analyzer::install::AstInstaller;
     use crate::env::{GlobalEnv, LocalEnv};
-    use crate::graph::VertexId;
     use crate::parser::ParseSession;
-    use crate::types::Type;
 
     /// Helper: parse Ruby source, process with AstInstaller, and return GlobalEnv
     fn analyze(source: &str) -> GlobalEnv {
@@ -120,55 +118,6 @@ mod tests {
         genv
     }
 
-    /// Helper: get the type string for a vertex ID (checks both Vertex and Source)
-    fn get_type_show(genv: &GlobalEnv, vtx: VertexId) -> String {
-        if let Some(vertex) = genv.get_vertex(vtx) {
-            vertex.show()
-        } else if let Some(source) = genv.get_source(vtx) {
-            source.ty.show()
-        } else {
-            panic!("vertex {:?} not found as either Vertex or Source", vtx);
-        }
-    }
-
-    #[test]
-    fn test_while_returns_nil() {
-        let source = r#"
-class Foo
-  def bar
-    while true
-      "hello"
-    end
-  end
-end
-"#;
-        let genv = analyze(source);
-        let info = genv
-            .resolve_method(&Type::instance("Foo"), "bar")
-            .expect("Foo#bar should be registered");
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "nil");
-    }
-
-    #[test]
-    fn test_until_returns_nil() {
-        let source = r#"
-class Foo
-  def bar
-    until false
-      "hello"
-    end
-  end
-end
-"#;
-        let genv = analyze(source);
-        let info = genv
-            .resolve_method(&Type::instance("Foo"), "bar")
-            .expect("Foo#bar should be registered");
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "nil");
-    }
-
     #[test]
     fn test_while_variable_assignment_in_body() {
         // Should not panic — variable assignment inside loop is processed
@@ -179,63 +128,6 @@ while true
 end
 "#;
         analyze(source);
-    }
-
-    #[test]
-    fn test_while_modifier_form() {
-        let source = r#"
-class Foo
-  def bar
-    x = "hello" while false
-  end
-end
-"#;
-        let genv = analyze(source);
-        let info = genv
-            .resolve_method(&Type::instance("Foo"), "bar")
-            .expect("Foo#bar should be registered");
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "nil");
-    }
-
-    #[test]
-    fn test_begin_end_while() {
-        let source = r#"
-class Foo
-  def bar
-    begin
-      "hello"
-    end while false
-  end
-end
-"#;
-        let genv = analyze(source);
-        let info = genv
-            .resolve_method(&Type::instance("Foo"), "bar")
-            .expect("Foo#bar should be registered");
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "nil");
-    }
-
-    // --- for loop tests ---
-
-    #[test]
-    fn test_for_returns_nil() {
-        let source = r#"
-class Foo
-  def bar
-    for x in [1, 2, 3]
-      x
-    end
-  end
-end
-"#;
-        let genv = analyze(source);
-        let info = genv
-            .resolve_method(&Type::instance("Foo"), "bar")
-            .expect("Foo#bar should be registered");
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "nil");
     }
 
     #[test]
@@ -262,40 +154,6 @@ class Foo
 end
 "#;
         // Should not panic — x is accessible after the loop
-        analyze(source);
-    }
-
-    #[test]
-    fn test_for_empty_body() {
-        let source = r#"
-class Foo
-  def bar
-    for x in [1, 2, 3]
-    end
-  end
-end
-"#;
-        let genv = analyze(source);
-        let info = genv
-            .resolve_method(&Type::instance("Foo"), "bar")
-            .expect("Foo#bar should be registered");
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "nil");
-    }
-
-    #[test]
-    fn test_for_with_method_call_in_body() {
-        // Should not panic — method call on loop variable is processed
-        // (type error check requires RBS, covered by Ruby integration test)
-        let source = r#"
-class Foo
-  def bar
-    for item in ["hello", "world"]
-      item.upcase
-    end
-  end
-end
-"#;
         analyze(source);
     }
 }

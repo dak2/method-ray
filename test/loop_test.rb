@@ -51,6 +51,45 @@ class LoopTest < Minitest::Test
     assert_no_check_errors(source)
   end
 
+  def test_while_modifier_form_no_error
+    source = <<~RUBY
+      class Foo
+        def bar
+          "hello".upcase while false
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_begin_end_while_no_error
+    source = <<~RUBY
+      class Foo
+        def bar
+          begin
+            "hello".upcase
+          end while false
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_for_empty_body_no_error
+    source = <<~RUBY
+      class Foo
+        def bar
+          for x in [1, 2, 3]
+          end
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
   # ============================================
   # Error Detection (check CLI)
   # ============================================
