@@ -94,6 +94,33 @@ class ReturnTest < Minitest::Test
   end
 
   # ============================================
+  # Type Inference (infer_types API)
+  # ============================================
+
+  def test_return_dead_code_over_approximation
+    source = <<~RUBY
+      class Foo
+        def bar
+          return "hello"
+          42
+        end
+
+        def baz
+          self.bar
+        end
+      end
+
+      x = Foo.new.baz
+    RUBY
+
+    types = infer(source)
+    type_str = types['x']
+    # Dead code after return is still processed (over-approximation)
+    assert_includes type_str, 'Integer'
+    assert_includes type_str, 'String'
+  end
+
+  # ============================================
   # Error Detection (check CLI)
   # ============================================
 
