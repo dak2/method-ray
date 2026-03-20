@@ -128,6 +128,26 @@ class ConditionalTest < Minitest::Test
     assert_type source, 'x', 'String'
   end
 
+  def test_nested_conditionals_union_type
+    source = <<~RUBY
+      x = if true
+            if false
+              "inner"
+            else
+              42
+            end
+          else
+            :sym
+          end
+    RUBY
+
+    types = infer(source)
+    type_str = types['x']
+    assert_includes type_str, 'Integer'
+    assert_includes type_str, 'String'
+    assert_includes type_str, 'Symbol'
+  end
+
   # ============================================
   # No Error (check CLI)
   # ============================================
