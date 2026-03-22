@@ -13,6 +13,10 @@ class ParenthesesTest < Minitest::Test
     assert_type 'x = (42)', 'x', 'Integer'
   end
 
+  def test_parenthesized_multiple_statements
+    assert_type 'x = (a = 1; "hello")', 'x', 'String'
+  end
+
   # ============================================
   # No Error
   # ============================================
