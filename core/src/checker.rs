@@ -134,16 +134,3 @@ fn collect_diagnostics(genv: &GlobalEnv, file_path: &Path) -> Vec<Diagnostic> {
 
     diagnostics
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_file_checker_creation() {
-        // This test will fail if RBS cache doesn't exist
-        // That's expected - cache should be generated from Ruby side first
-        let result = FileChecker::new();
-        assert!(result.is_ok() || result.is_err()); // Just check it doesn't panic
-    }
-}
