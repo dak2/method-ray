@@ -59,14 +59,14 @@ pub(crate) fn collect_arguments<'a>(
 
 /// Kind of attr_* declaration
 #[derive(Debug, Clone, Copy)]
-pub enum AttrKind {
+pub(crate) enum AttrKind {
     Reader,
     Writer,
     Accessor,
 }
 
 /// Result of dispatching a simple node (no child processing needed)
-pub enum DispatchResult {
+pub(crate) enum DispatchResult {
     /// Node produced a vertex
     Vertex(VertexId),
     /// Node was not handled
@@ -74,7 +74,7 @@ pub enum DispatchResult {
 }
 
 /// Kind of child processing needed
-pub enum NeedsChildKind<'a> {
+pub(crate) enum NeedsChildKind<'a> {
     /// Instance variable write: need to process value, then call finish_ivar_write
     IvarWrite { ivar_name: String, value: Node<'a> },
     /// Local variable write: need to process value, then call finish_local_var_write
@@ -112,7 +112,7 @@ pub enum NeedsChildKind<'a> {
 
 /// Kind of module mixin (include or extend)
 #[derive(Debug, Clone, Copy)]
-pub enum MixinKind {
+pub(crate) enum MixinKind {
     Include,
     Extend,
 }
@@ -121,7 +121,7 @@ pub enum MixinKind {
 ///
 /// Note: Literals (including Array) are handled in install.rs via install_literal
 /// because Array literals need child processing for element type inference.
-pub fn dispatch_simple(genv: &mut GlobalEnv, lenv: &mut LocalEnv, node: &Node) -> DispatchResult {
+pub(crate) fn dispatch_simple(genv: &mut GlobalEnv, lenv: &mut LocalEnv, node: &Node) -> DispatchResult {
     // Instance variable read: @name
     if let Some(ivar_read) = node.as_instance_variable_read_node() {
         let ivar_name = bytes_to_name(ivar_read.name().as_slice());
@@ -196,7 +196,7 @@ fn extract_mixin_module_names(call_node: &ruby_prism::CallNode) -> Vec<String> {
 }
 
 /// Check if node needs child processing
-pub fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<NeedsChildKind<'a>> {
+pub(crate) fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<NeedsChildKind<'a>> {
     // Instance variable write: @name = value
     if let Some(ivar_write) = node.as_instance_variable_write_node() {
         let ivar_name = bytes_to_name(ivar_write.name().as_slice());
