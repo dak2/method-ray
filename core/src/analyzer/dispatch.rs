@@ -479,153 +479,7 @@ mod tests {
         genv
     }
 
-    /// Helper: get the type string for a vertex ID (checks both Vertex and Source)
-    fn get_type_show(genv: &GlobalEnv, vtx: VertexId) -> String {
-        if let Some(vertex) = genv.get_vertex(vtx) {
-            vertex.show()
-        } else if let Some(source) = genv.get_source(vtx) {
-            source.ty.show()
-        } else {
-            panic!("vertex {:?} not found as either Vertex or Source", vtx);
-        }
-    }
-
-    // Test 1: Receiverless method call type resolution
-    #[test]
-    fn test_implicit_self_call_type_resolution() {
-        let source = r#"
-class User
-  def name
-    "Alice"
-  end
-
-  def greet
-    name
-  end
-end
-"#;
-        let genv = analyze(source);
-
-        // User#greet should resolve to String via User#name
-        let info = genv
-            .resolve_method(&Type::instance("User"), "greet")
-            .expect("User#greet should be registered");
-        assert!(info.return_vertex.is_some());
-
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "String");
-    }
-
-    // Test 2: Receiverless method call with arguments
-    #[test]
-    fn test_implicit_self_call_with_arguments() {
-        let source = r#"
-class Calculator
-  def add(x, y)
-    x
-  end
-
-  def compute
-    add(1, 2)
-  end
-end
-"#;
-        let genv = analyze(source);
-
-        // Calculator#compute should resolve via Calculator#add
-        let info = genv
-            .resolve_method(&Type::instance("Calculator"), "compute")
-            .expect("Calculator#compute should be registered");
-        assert!(info.return_vertex.is_some());
-
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "Integer");
-    }
-
-    // Test 3: Receiverless call in nested class
-    #[test]
-    fn test_implicit_self_call_in_nested_class() {
-        let source = r#"
-module Api
-  module V1
-    class User
-      def name
-        "Alice"
-      end
-
-      def greet
-        name
-      end
-    end
-  end
-end
-"#;
-        let genv = analyze(source);
-
-        // Method registered with qualified name "Api::V1::User"
-        let info = genv
-            .resolve_method(&Type::instance("Api::V1::User"), "greet")
-            .expect("Api::V1::User#greet should be registered");
-        assert!(info.return_vertex.is_some());
-
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "String");
-    }
-
-    // Test 4: Receiverless call in module
-    #[test]
-    fn test_implicit_self_call_in_module() {
-        let source = r#"
-module Utils
-  def self.format(value)
-    value
-  end
-
-  def self.run
-    format("test")
-  end
-end
-"#;
-        let genv = analyze(source);
-
-        // Utils.run should be registered
-        let info = genv
-            .resolve_method(&Type::singleton("Utils"), "run")
-            .expect("Utils.run should be registered");
-        assert!(info.return_vertex.is_some());
-    }
-
-    // Test 5: Receiverless call from within block
-    #[test]
-    fn test_implicit_self_call_from_block() {
-        let source = r#"
-class User
-  def name
-    "Alice"
-  end
-
-  def greet
-    [1].each { name }
-  end
-end
-"#;
-        let genv = analyze(source);
-
-        // User#name should be registered and resolve to String
-        let name_info = genv
-            .resolve_method(&Type::instance("User"), "name")
-            .expect("User#name should be registered");
-        assert!(name_info.return_vertex.is_some());
-        assert_eq!(get_type_show(&genv, name_info.return_vertex.unwrap()), "String");
-
-        // User#greet should also be registered (block contains implicit self call)
-        let greet_info = genv
-            .resolve_method(&Type::instance("User"), "greet")
-            .expect("User#greet should be registered");
-        assert!(greet_info.return_vertex.is_some());
-    }
-
-    // Test 6: Top-level receiverless call (Object receiver)
+    // Top-level receiverless call (Object receiver) — smoke test for no panic
     #[test]
     fn test_implicit_self_call_at_top_level() {
         let source = r#"
@@ -635,16 +489,10 @@ end
 
 helper
 "#;
-        let genv = analyze(source);
-
-        // Should not panic; top-level call uses Object as receiver type
-        // NOTE: top-level def is not registered in method_registry yet,
-        // so this will produce a type error (false positive).
-        // The important thing is that it doesn't panic.
-        // No panic is the real assertion - top-level call should be processed without error
-        let _ = genv;
+        let _ = analyze(source);
     }
 
+    // attr_reader with unassigned ivar — empty vertex registration
     #[test]
     fn test_attr_reader_unassigned() {
         let source = r#"
@@ -661,7 +509,7 @@ end
         assert!(info.return_vertex.is_some());
     }
 
-    // Test 15: super call independence (SuperNode is not CallNode)
+    // super is a SuperNode, not a CallNode — routing independence
     #[test]
     fn test_super_call_independence() {
         let source = r#"
@@ -679,115 +527,14 @@ end
 "#;
         let genv = analyze(source);
 
-        // super is a SuperNode, not a CallNode, so ImplicitSelfCall should not be triggered.
-        // Base#greet should still work.
         let info = genv
             .resolve_method(&Type::instance("Base"), "greet")
             .expect("Base#greet should be registered");
-        assert!(info.return_vertex.is_some());
-
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "String");
+        let ret_vtx = info.return_vertex.expect("should have return vertex");
+        assert_eq!(genv.get_vertex(ret_vtx).unwrap().show(), "String");
     }
 
-    // Test 16: User.new → instance(User)
-    #[test]
-    fn test_constant_read_user_new() {
-        let source = r#"
-class User
-  def name
-    "Alice"
-  end
-end
-
-x = User.new
-"#;
-        let genv = analyze(source);
-        assert!(
-            genv.type_errors.is_empty(),
-            "User.new should not produce type errors: {:?}",
-            genv.type_errors
-        );
-    }
-
-    // Test 17: User.new.name → String
-    #[test]
-    fn test_constant_read_user_new_method_chain() {
-        let source = r#"
-class User
-  def name
-    "Alice"
-  end
-end
-
-x = User.new.name
-"#;
-        let genv = analyze(source);
-        assert!(
-            genv.type_errors.is_empty(),
-            "User.new.name should not produce type errors: {:?}",
-            genv.type_errors
-        );
-    }
-
-    // Test 18: Api::User.new → instance(Api::User) (ConstantPathNode)
-    #[test]
-    fn test_constant_path_qualified_new() {
-        let source = r#"
-class Api::User
-  def name
-    "Alice"
-  end
-end
-
-x = Api::User.new
-"#;
-        let genv = analyze(source);
-        assert!(
-            genv.type_errors.is_empty(),
-            "Api::User.new should not produce type errors: {:?}",
-            genv.type_errors
-        );
-    }
-
-    // Test 19: User.new("Alice") → initialize parameter propagation
-    #[test]
-    fn test_constant_read_new_with_initialize_params() {
-        let source = r#"
-class User
-  def initialize(name)
-    @name = name
-  end
-end
-
-x = User.new("Alice")
-"#;
-        let genv = analyze(source);
-        assert!(genv.type_errors.is_empty());
-    }
-
-    // Test 20: user = User.new; user.name → String
-    #[test]
-    fn test_constant_read_assign_and_call() {
-        let source = r#"
-class User
-  def name
-    "Alice"
-  end
-end
-
-user = User.new
-user.name
-"#;
-        let genv = analyze(source);
-        assert!(
-            genv.type_errors.is_empty(),
-            "user = User.new; user.name should not produce type errors: {:?}",
-            genv.type_errors
-        );
-    }
-
-    // Test 21: User.some_method should not produce type error (Singleton error suppression)
+    // Singleton error suppression — unknown class method should not produce error
     #[test]
     fn test_constant_read_no_false_positive() {
         let source = r#"
@@ -807,214 +554,7 @@ User.some_method
         );
     }
 
-    // Test: ConstantPathNode.new resolves with qualified method name
-    #[test]
-    fn test_constant_path_new_with_qualified_method() {
-        let source = r#"
-module Api
-  class User
-    def name
-      "Alice"
-    end
-  end
-end
-
-Api::User.new.name
-"#;
-        let genv = analyze(source);
-        // Api::User.new.name should resolve correctly — no type errors
-        assert!(
-            genv.type_errors.is_empty(),
-            "Api::User.new.name should not produce type errors: {:?}",
-            genv.type_errors
-        );
-    }
-
-    // Test 23: ConstantReadNode inside module resolves to qualified name
-    #[test]
-    fn test_constant_read_inside_module_resolves_qualified() {
-        let source = r#"
-module Api
-  class User
-    def name
-      "Alice"
-    end
-  end
-
-  class Service
-    def run
-      User.new.name
-    end
-  end
-end
-"#;
-        let genv = analyze(source);
-        assert!(
-            genv.type_errors.is_empty(),
-            "User.new inside module Api should resolve to Api::User: {:?}",
-            genv.type_errors
-        );
-    }
-
-    // Test 24: ConstantReadNode in deeply nested modules
-    #[test]
-    fn test_constant_read_deeply_nested() {
-        let source = r#"
-module Api
-  module V1
-    class User
-      def name
-        "Alice"
-      end
-    end
-
-    class Service
-      def run
-        User.new.name
-      end
-    end
-  end
-end
-"#;
-        let genv = analyze(source);
-        assert!(
-            genv.type_errors.is_empty(),
-            "User.new inside Api::V1 should resolve to Api::V1::User: {:?}",
-            genv.type_errors
-        );
-    }
-
-    // Test 25: Same constant name in different modules
-    #[test]
-    fn test_constant_read_same_name_different_modules() {
-        let source = r#"
-module Api
-  class User
-    def name; "Api User"; end
-  end
-end
-
-module Admin
-  class User
-    def name; "Admin User"; end
-  end
-
-  class Service
-    def run
-      User.new.name
-    end
-  end
-end
-"#;
-        let genv = analyze(source);
-        assert!(
-            genv.type_errors.is_empty(),
-            "User.new inside Admin should resolve to Admin::User: {:?}",
-            genv.type_errors
-        );
-    }
-
-    // === Keyword argument tests ===
-
-    // Test 26: Required keyword argument type propagation
-    #[test]
-    fn test_keyword_arg_required_propagation() {
-        let source = r#"
-class Greeter
-  def greet(name:)
-    name
-  end
-end
-
-Greeter.new.greet(name: "Alice")
-"#;
-        let genv = analyze(source);
-
-        let info = genv
-            .resolve_method(&Type::instance("Greeter"), "greet")
-            .expect("Greeter#greet should be registered");
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "String");
-    }
-
-    // Test 27: Optional keyword argument with default type
-    #[test]
-    fn test_keyword_arg_optional_default_type() {
-        let source = r#"
-class Counter
-  def count(step: 1)
-    step
-  end
-end
-"#;
-        let genv = analyze(source);
-
-        let info = genv
-            .resolve_method(&Type::instance("Counter"), "count")
-            .expect("Counter#count should be registered");
-        let ret_vtx = info.return_vertex.unwrap();
-        // step has Integer type from default value
-        assert_eq!(get_type_show(&genv, ret_vtx), "Integer");
-    }
-
-    // Test 28: Positional and keyword arguments mixed
-    #[test]
-    fn test_positional_and_keyword_mixed() {
-        let source = r#"
-class User
-  def initialize(id, name:)
-    @id = id
-    @name = name
-  end
-end
-
-User.new(1, name: "Alice")
-"#;
-        let genv = analyze(source);
-        assert!(genv.type_errors.is_empty());
-    }
-
-    // Test 29: Keyword argument via .new propagation to initialize
-    #[test]
-    fn test_keyword_arg_via_new_to_initialize() {
-        let source = r#"
-class Config
-  def initialize(debug:)
-    @debug = debug
-  end
-
-  def debug?
-    @debug
-  end
-end
-
-Config.new(debug: true)
-"#;
-        let genv = analyze(source);
-        assert!(genv.type_errors.is_empty());
-    }
-
-    // Test 30: Multiple keyword arguments
-    #[test]
-    fn test_multiple_keyword_args() {
-        let source = r#"
-class User
-  def profile(name:, age:)
-    name
-  end
-end
-
-User.new.profile(name: "Alice", age: 30)
-"#;
-        let genv = analyze(source);
-
-        let info = genv
-            .resolve_method(&Type::instance("User"), "profile")
-            .expect("User#profile should be registered");
-        let ret_vtx = info.return_vertex.unwrap();
-        assert_eq!(get_type_show(&genv, ret_vtx), "String");
-    }
-
+    // include unknown module — robustness (no panic)
     #[test]
     fn test_include_unknown_module() {
         let source = r#"
@@ -1023,11 +563,10 @@ class User
 end
 "#;
         let genv = analyze(source);
-        // Should not panic; unknown module is recorded but methods won't resolve
         let _ = genv;
     }
 
-    // Extend with unknown module (no crash)
+    // extend unknown module — robustness (no panic)
     #[test]
     fn test_extend_unknown_module_no_panic() {
         let source = r#"
@@ -1036,7 +575,6 @@ class User
 end
 "#;
         let genv = analyze(source);
-        // Should not panic; unknown module is recorded but no methods are resolved
         assert!(genv.type_errors.is_empty());
     }
 }

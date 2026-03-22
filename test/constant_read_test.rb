@@ -116,6 +116,28 @@ class ConstantReadTest < Minitest::Test
     assert_no_check_errors(source)
   end
 
+  def test_deeply_nested_constant_resolution
+    source = <<~RUBY
+      module Api
+        module V1
+          class User
+            def name
+              "Alice"
+            end
+          end
+
+          class Service
+            def run
+              User.new.name.upcase
+            end
+          end
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
   # ============================================
   # Error Detection
   # ============================================
