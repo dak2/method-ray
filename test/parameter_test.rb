@@ -177,6 +177,28 @@ class ParameterTest < Minitest::Test
   end
 
   # ============================================
+  # Keyword Argument via .new → initialize
+  # ============================================
+
+  def test_keyword_arg_via_new_to_initialize
+    source = <<~RUBY
+      class Config
+        def initialize(debug:)
+          @debug = debug
+        end
+
+        def debug?
+          @debug
+        end
+      end
+
+      x = Config.new(debug: true).debug?
+    RUBY
+
+    assert_type(source, 'x', 'TrueClass')
+  end
+
+  # ============================================
   # Error Detection
   # ============================================
 

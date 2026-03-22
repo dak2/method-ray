@@ -123,6 +123,38 @@ class ImplicitSelfCallTest < Minitest::Test
     assert_no_check_errors(source)
   end
 
+  def test_implicit_self_call_from_block
+    source = <<~RUBY
+      class User
+        def name
+          "Alice"
+        end
+
+        def greet
+          [1].each { name }
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_implicit_self_call_in_module
+    source = <<~RUBY
+      module Utils
+        def self.format(value)
+          value
+        end
+
+        def self.run
+          format("test")
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
   # ============================================
   # Error Detection
   # ============================================
