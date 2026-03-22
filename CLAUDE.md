@@ -44,15 +44,17 @@ bundle exec ruby -Ilib -Itest test/string_test.rb
 ```
 core/src/           # Rust core (type inference engine)
   analyzer/         #   AST → Graph conversion (install.rs is the entry point)
-  env/              #   Environment (GlobalEnv, LocalEnv, MethodRegistry, Scope)
+  diagnostics/      #   Error diagnostics & formatter
+  env/              #   Environment (GlobalEnv, LocalEnv, MethodRegistry, Scope, BoxManager, VertexManager, TypeError)
   graph/            #   Type graph (Vertex, Box, ChangeSet)
   rbs/              #   RBS loader & type conversion
   cache/            #   RBS binary cache
   types.rs          #   Type definitions (Instance, Generic, Union, Nil, Bot, Singleton)
-  checker.rs        #   FileChecker (per-file type checking)
+  checker.rs        #   FileChecker (per-file type checking, requires cli/lsp feature)
   parser.rs         #   ruby-prism + bumpalo parser
-  cli/              #   CLI (check, watch, clear-cache)
-  lsp/              #   LSP server
+  source_map.rs     #   Byte offset → line/column conversion
+  cli/              #   CLI (check, watch, clear-cache, requires cli feature)
+  lsp/              #   LSP server (requires lsp feature)
 ext/                # Ruby FFI bridge (via magnus)
 lib/                # Ruby library (gem entry point)
 test/               # Ruby integration tests (minitest)
@@ -77,14 +79,7 @@ test/               # Ruby integration tests (minitest)
 
 ### Ruby
 
-- Always include `frozen_string_literal: true` in every file
-- Follow RuboCop config (`.rubocop.yml`)
 - Write tests with minitest under `test/` as `*_test.rb`
-
-### Commit Messages
-
-- Write in English
-- Start with an imperative verb (e.g., `Add while/until loop support`, `Fix false positive on ...`)
 
 ## Architecture Overview
 
