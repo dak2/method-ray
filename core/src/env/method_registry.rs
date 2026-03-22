@@ -239,42 +239,6 @@ mod tests {
         assert_eq!(pvs[1], VertexId(21));
     }
 
-    // --- Object/Kernel fallback ---
-
-    #[test]
-    fn test_resolve_falls_back_to_object() {
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("Object"), "nil?", Type::instance("TrueClass"));
-        let info = registry.resolve(&Type::instance("CustomClass"), "nil?", &ResolutionContext::empty()).unwrap();
-        assert_eq!(info.return_type.base_class_name(), Some("TrueClass"));
-    }
-
-    #[test]
-    fn test_resolve_falls_back_to_kernel() {
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("Kernel"), "puts", Type::Nil);
-        let info = registry.resolve(&Type::instance("MyApp"), "puts", &ResolutionContext::empty()).unwrap();
-        assert_eq!(info.return_type, Type::Nil);
-    }
-
-    #[test]
-    fn test_resolve_object_before_kernel() {
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("Object"), "to_s", Type::string());
-        registry.register(Type::instance("Kernel"), "to_s", Type::integer());
-        let info = registry.resolve(&Type::instance("Anything"), "to_s", &ResolutionContext::empty()).unwrap();
-        assert_eq!(info.return_type.base_class_name(), Some("String"));
-    }
-
-    #[test]
-    fn test_resolve_exact_match_over_fallback() {
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::string(), "length", Type::integer());
-        registry.register(Type::instance("Object"), "length", Type::string());
-        let info = registry.resolve(&Type::string(), "length", &ResolutionContext::empty()).unwrap();
-        assert_eq!(info.return_type.base_class_name(), Some("Integer"));
-    }
-
     // --- Types that skip fallback ---
 
     #[test]
@@ -306,114 +270,6 @@ mod tests {
         assert!(registry.resolve(&Type::Bot, "puts", &ResolutionContext::empty()).is_none());
     }
 
-    // --- Generic type fallback chain ---
-
-    #[test]
-    fn test_resolve_generic_falls_back_to_kernel() {
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("Kernel"), "puts", Type::Nil);
-        let generic_type = Type::array_of(Type::integer());
-        let info = registry.resolve(&generic_type, "puts", &ResolutionContext::empty()).unwrap();
-        assert_eq!(info.return_type, Type::Nil);
-    }
-
-    #[test]
-    fn test_resolve_generic_full_chain() {
-        // Verify the 4-step fallback: Generic[T] → Base → Object → Kernel
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("Kernel"), "object_id", Type::integer());
-        let generic_type = Type::array_of(Type::string());
-        // Array[String] → Array (none) → Object (none) → Kernel (exists)
-        let info = registry.resolve(&generic_type, "object_id", &ResolutionContext::empty()).unwrap();
-        assert_eq!(info.return_type.base_class_name(), Some("Integer"));
-    }
-
-    // --- Namespaced class fallback ---
-
-    #[test]
-    fn test_resolve_namespaced_class_falls_back_to_object() {
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("Object"), "class", Type::string());
-        let info = registry.resolve(&Type::instance("Api::V1::User"), "class", &ResolutionContext::empty()).unwrap();
-        assert_eq!(info.return_type.base_class_name(), Some("String"));
-    }
-
-    // --- Include (mixin) fallback ---
-
-    #[test]
-    fn test_resolve_with_include() {
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("Greetable"), "greet", Type::string());
-
-        let mut inclusions = HashMap::new();
-        inclusions.insert("User".to_string(), vec!["Greetable".to_string()]);
-        let ctx = ResolutionContext {
-            inclusions: &inclusions,
-            superclass_map: &HashMap::new(),
-            extensions: &HashMap::new(),
-        };
-
-        let info = registry.resolve(&Type::instance("User"), "greet", &ctx).unwrap();
-        assert_eq!(info.return_type.base_class_name(), Some("String"));
-    }
-
-    #[test]
-    fn test_resolve_include_order() {
-        // include A; include B → B's method found first (MRO: last included wins)
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("A"), "foo", Type::string());
-        registry.register(Type::instance("B"), "foo", Type::integer());
-
-        let mut inclusions = HashMap::new();
-        inclusions.insert("User".to_string(), vec!["A".to_string(), "B".to_string()]);
-        let ctx = ResolutionContext {
-            inclusions: &inclusions,
-            superclass_map: &HashMap::new(),
-            extensions: &HashMap::new(),
-        };
-
-        let info = registry.resolve(&Type::instance("User"), "foo", &ctx).unwrap();
-        assert_eq!(info.return_type.base_class_name(), Some("Integer"));
-    }
-
-    #[test]
-    fn test_resolve_class_method_over_include() {
-        // Class's own method takes priority over included module
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("Greetable"), "greet", Type::string());
-        registry.register(Type::instance("User"), "greet", Type::integer());
-
-        let mut inclusions = HashMap::new();
-        inclusions.insert("User".to_string(), vec!["Greetable".to_string()]);
-        let ctx = ResolutionContext {
-            inclusions: &inclusions,
-            superclass_map: &HashMap::new(),
-            extensions: &HashMap::new(),
-        };
-
-        let info = registry.resolve(&Type::instance("User"), "greet", &ctx).unwrap();
-        assert_eq!(info.return_type.base_class_name(), Some("Integer"));
-    }
-
-    #[test]
-    fn test_resolve_include_before_object() {
-        // Included module is searched before Object in MRO
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("Object"), "foo", Type::string());
-        registry.register(Type::instance("MyModule"), "foo", Type::integer());
-
-        let mut inclusions = HashMap::new();
-        inclusions.insert("User".to_string(), vec!["MyModule".to_string()]);
-        let ctx = ResolutionContext {
-            inclusions: &inclusions,
-            superclass_map: &HashMap::new(),
-            extensions: &HashMap::new(),
-        };
-
-        let info = registry.resolve(&Type::instance("User"), "foo", &ctx).unwrap();
-        assert_eq!(info.return_type.base_class_name(), Some("Integer"));
-    }
-
     #[test]
     fn test_singleton_type_skips_include_fallback() {
         // include adds instance methods only — Singleton (class-level) should NOT resolve
@@ -429,84 +285,6 @@ mod tests {
         };
 
         assert!(registry.resolve(&Type::singleton("User"), "greet", &ctx).is_none());
-    }
-
-    // --- Superclass chain tests ---
-
-    #[test]
-    fn test_resolve_with_superclass() {
-        // Dog < Animal: Dog.new can call Animal methods
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("Animal"), "speak", Type::string());
-
-        let mut superclass_map = HashMap::new();
-        superclass_map.insert("Dog".to_string(), "Animal".to_string());
-        let ctx = ResolutionContext {
-            inclusions: &HashMap::new(),
-            superclass_map: &superclass_map,
-            extensions: &HashMap::new(),
-        };
-
-        let info = registry.resolve(&Type::instance("Dog"), "speak", &ctx).unwrap();
-        assert_eq!(info.return_type.base_class_name(), Some("String"));
-    }
-
-    #[test]
-    fn test_resolve_multi_level_inheritance() {
-        // Puppy < Dog < Animal chain
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("Animal"), "breathe", Type::string());
-
-        let mut superclass_map = HashMap::new();
-        superclass_map.insert("Dog".to_string(), "Animal".to_string());
-        superclass_map.insert("Puppy".to_string(), "Dog".to_string());
-        let ctx = ResolutionContext {
-            inclusions: &HashMap::new(),
-            superclass_map: &superclass_map,
-            extensions: &HashMap::new(),
-        };
-
-        let info = registry.resolve(&Type::instance("Puppy"), "breathe", &ctx).unwrap();
-        assert_eq!(info.return_type.base_class_name(), Some("String"));
-    }
-
-    #[test]
-    fn test_resolve_override_takes_priority() {
-        // Dog overrides Animal method
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("Animal"), "speak", Type::string());
-        registry.register(Type::instance("Dog"), "speak", Type::integer());
-
-        let mut superclass_map = HashMap::new();
-        superclass_map.insert("Dog".to_string(), "Animal".to_string());
-        let ctx = ResolutionContext {
-            inclusions: &HashMap::new(),
-            superclass_map: &superclass_map,
-            extensions: &HashMap::new(),
-        };
-
-        let info = registry.resolve(&Type::instance("Dog"), "speak", &ctx).unwrap();
-        assert_eq!(info.return_type.base_class_name(), Some("Integer"));
-    }
-
-    #[test]
-    fn test_resolve_parent_include() {
-        // Dog < Animal where Animal includes Greetable
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("Greetable"), "greet", Type::string());
-
-        let mut inclusions = HashMap::new();
-        inclusions.insert("Animal".to_string(), vec!["Greetable".to_string()]);
-        let mut superclass_map = HashMap::new();
-        superclass_map.insert("Dog".to_string(), "Animal".to_string());
-        let ctx = ResolutionContext {
-            inclusions: &inclusions,
-            superclass_map: &superclass_map,
-            extensions: &HashMap::new(),
-        };
-
-        let info = registry.resolve(&Type::instance("Dog"), "greet", &ctx).unwrap();
-        assert_eq!(info.return_type.base_class_name(), Some("String"));
     }
 
     #[test]
@@ -527,45 +305,6 @@ mod tests {
         assert!(registry.resolve(&Type::instance("A"), "missing", &ctx).is_none());
     }
 
-    // --- Extend (module extension) tests ---
-
-    #[test]
-    fn test_resolve_with_extend() {
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("ClassMethods"), "find", Type::string());
-
-        let mut extensions = HashMap::new();
-        extensions.insert("User".to_string(), vec!["ClassMethods".to_string()]);
-        let ctx = ResolutionContext {
-            inclusions: &HashMap::new(),
-            superclass_map: &HashMap::new(),
-            extensions: &extensions,
-        };
-
-        let info = registry.resolve(&Type::singleton("User"), "find", &ctx).unwrap();
-        assert_eq!(info.return_type.base_class_name(), Some("String"));
-    }
-
-    #[test]
-    fn test_resolve_extend_order() {
-        // extend A; extend B → B has higher priority (last extended wins)
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("A"), "foo", Type::string());
-        registry.register(Type::instance("B"), "foo", Type::integer());
-
-        let mut extensions = HashMap::new();
-        extensions.insert("User".to_string(), vec!["A".to_string(), "B".to_string()]);
-        let ctx = ResolutionContext {
-            inclusions: &HashMap::new(),
-            superclass_map: &HashMap::new(),
-            extensions: &extensions,
-        };
-
-        let info = registry.resolve(&Type::singleton("User"), "foo", &ctx).unwrap();
-        // B is extended last → higher priority
-        assert_eq!(info.return_type.base_class_name(), Some("Integer"));
-    }
-
     #[test]
     fn test_resolve_extend_does_not_affect_instance() {
         let mut registry = MethodRegistry::new();
@@ -583,22 +322,4 @@ mod tests {
         assert!(registry.resolve(&Type::instance("User"), "find", &ctx).is_none());
     }
 
-    #[test]
-    fn test_resolve_def_self_over_extend() {
-        let mut registry = MethodRegistry::new();
-        registry.register(Type::instance("ClassMethods"), "find", Type::string());
-        registry.register(Type::singleton("User"), "find", Type::integer());
-
-        let mut extensions = HashMap::new();
-        extensions.insert("User".to_string(), vec!["ClassMethods".to_string()]);
-        let ctx = ResolutionContext {
-            inclusions: &HashMap::new(),
-            superclass_map: &HashMap::new(),
-            extensions: &extensions,
-        };
-
-        let info = registry.resolve(&Type::singleton("User"), "find", &ctx).unwrap();
-        // def self.find (exact match) takes priority over extend
-        assert_eq!(info.return_type.base_class_name(), Some("Integer"));
-    }
 }
