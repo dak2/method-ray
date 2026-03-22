@@ -11,7 +11,6 @@ Gem::Specification.new do |spec|
   spec.summary       = 'Method-Ray is a fast static analysis tool for Ruby methods.'
   spec.description   = <<~DESCRIPTION
     Method-Ray is a static analysis tool that checks the callability of methods in Ruby code.
-    It uses graph-based type inference to detect undefined method calls at analysis time.
   DESCRIPTION
   spec.homepage      = 'https://github.com/dak2/method-ray'
   spec.license       = 'MIT'
