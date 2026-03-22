@@ -24,7 +24,7 @@ use super::bytes_to_name;
 ///   name.upcase
 /// end
 /// ```
-pub fn install_required_parameter(genv: &mut GlobalEnv, lenv: &mut LocalEnv, name: String) -> VertexId {
+pub(crate) fn install_required_parameter(genv: &mut GlobalEnv, lenv: &mut LocalEnv, name: String) -> VertexId {
     // Create a vertex for the parameter (starts as Bot/untyped)
     let param_vtx = genv.new_vertex();
 
@@ -44,7 +44,7 @@ pub fn install_required_parameter(genv: &mut GlobalEnv, lenv: &mut LocalEnv, nam
 ///   name.upcase
 /// end
 /// ```
-pub fn install_optional_parameter(
+pub(crate) fn install_optional_parameter(
     genv: &mut GlobalEnv,
     lenv: &mut LocalEnv,
     _changes: &mut ChangeSet,
@@ -75,7 +75,7 @@ pub fn install_optional_parameter(
 ///   items.first
 /// end
 /// ```
-pub fn install_rest_parameter(genv: &mut GlobalEnv, lenv: &mut LocalEnv, name: String) -> VertexId {
+pub(crate) fn install_rest_parameter(genv: &mut GlobalEnv, lenv: &mut LocalEnv, name: String) -> VertexId {
     // Create a vertex for the parameter
     let param_vtx = genv.new_vertex();
 
@@ -99,7 +99,7 @@ pub fn install_rest_parameter(genv: &mut GlobalEnv, lenv: &mut LocalEnv, name: S
 ///   options[:debug]
 /// end
 /// ```
-pub fn install_keyword_rest_parameter(
+pub(crate) fn install_keyword_rest_parameter(
     genv: &mut GlobalEnv,
     lenv: &mut LocalEnv,
     name: String,

@@ -10,7 +10,7 @@ use crate::graph::{ChangeSet, VertexId};
 use crate::types::Type;
 
 /// Install local variable write: x = value
-pub fn install_local_var_write(
+pub(crate) fn install_local_var_write(
     genv: &mut GlobalEnv,
     lenv: &mut LocalEnv,
     changes: &mut ChangeSet,
@@ -24,7 +24,7 @@ pub fn install_local_var_write(
 }
 
 /// Install local variable read: x
-pub fn install_local_var_read(lenv: &LocalEnv, var_name: &str) -> Option<VertexId> {
+pub(crate) fn install_local_var_read(lenv: &LocalEnv, var_name: &str) -> Option<VertexId> {
     lenv.get_var(var_name)
 }
 
@@ -33,7 +33,7 @@ pub fn install_local_var_read(lenv: &LocalEnv, var_name: &str) -> Option<VertexI
 /// If @name already has a pre-allocated VertexId (e.g., from attr_reader),
 /// an edge is added from value_vtx to the existing vertex so types propagate.
 /// Otherwise, value_vtx is registered directly as the ivar's VertexId.
-pub fn install_ivar_write(
+pub(crate) fn install_ivar_write(
     genv: &mut GlobalEnv,
     ivar_name: String,
     value_vtx: VertexId,
@@ -49,13 +49,13 @@ pub fn install_ivar_write(
 }
 
 /// Install instance variable read: @name
-pub fn install_ivar_read(genv: &GlobalEnv, ivar_name: &str) -> Option<VertexId> {
+pub(crate) fn install_ivar_read(genv: &GlobalEnv, ivar_name: &str) -> Option<VertexId> {
     genv.scope_manager.lookup_instance_var(ivar_name)
 }
 
 /// Install self node
 /// Uses the fully qualified name if available (e.g., Api::V1::User instead of just User)
-pub fn install_self(genv: &mut GlobalEnv) -> VertexId {
+pub(crate) fn install_self(genv: &mut GlobalEnv) -> VertexId {
     if let Some(qualified_name) = genv.scope_manager.current_qualified_name() {
         genv.new_source(Type::instance(&qualified_name))
     } else {

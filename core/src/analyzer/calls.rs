@@ -12,7 +12,7 @@ use crate::graph::{MethodCallBox, VertexId};
 use crate::source_map::SourceLocation;
 
 /// Install method call and return the return value's VertexId
-pub fn install_method_call(
+pub(crate) fn install_method_call(
     genv: &mut GlobalEnv,
     recv_vtx: VertexId,
     method_name: String,
