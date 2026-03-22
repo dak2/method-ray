@@ -16,28 +16,26 @@ gem install methodray
 
 ## Quick Start
 
-### VSCode Extension (under development)
-
-1. Install the [Method-Ray VSCode extension](https://github.com/dak2/method-ray-vscode)
-2. Open a Ruby file in VSCode
-3. Errors will be highlighted automatically
-
-### CLI
+### Checking Methods
 
 ```bash
 # Check a single file
 bundle exec methodray check app/models/user.rb
+```
 
-# Watch mode - auto re-check on file changes
+### Watching for File Changes, Re-checking Methods
+
+```bash
+# Watch a file for changes and re-check on save
 bundle exec methodray watch app/models/user.rb
 ```
 
-#### Example
+#### Example Usage
 
-`methodray check <file>`: Performs static type checking on the specified Ruby file.
-
+`bundle exec methodray check app/models/user.rb`
 
 ```ruby
+# app/models/user.rb
 class User
   def greeting
     name = "Alice"
