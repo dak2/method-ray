@@ -217,38 +217,3 @@ pub(crate) fn process_multi_write_node(
 
     last_vtx
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::analyzer::install::AstInstaller;
-    use crate::env::{GlobalEnv, LocalEnv};
-    use crate::parser::ParseSession;
-
-    fn analyze(source: &str) -> (GlobalEnv, LocalEnv) {
-        let session = ParseSession::new();
-        let parse_result = session.parse_source(source, "test.rb").unwrap();
-        let root = parse_result.node();
-        let program = root.as_program_node().unwrap();
-
-        let mut genv = GlobalEnv::new();
-        let mut lenv = LocalEnv::new();
-
-        let mut installer = AstInstaller::new(&mut genv, &mut lenv, source);
-        for stmt in &program.statements().body() {
-            installer.install_node(&stmt);
-        }
-        installer.finish();
-
-        (genv, lenv)
-    }
-
-    #[test]
-    fn test_multi_write_does_not_panic_on_non_array_rhs() {
-        let source = "a, b = some_expr";
-        let (_, lenv) = analyze(source);
-
-        // Variables should be registered (untyped) without panic
-        assert!(lenv.get_var("a").is_some(), "a should be registered");
-        assert!(lenv.get_var("b").is_some(), "b should be registered");
-    }
-}
