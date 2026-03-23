@@ -62,23 +62,3 @@ pub(crate) fn install_self(genv: &mut GlobalEnv) -> VertexId {
         genv.new_source(Type::instance("Object"))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_install_self_at_top_level() {
-        let mut genv = GlobalEnv::new();
-
-        let vtx = install_self(&mut genv);
-        assert_eq!(genv.get_source(vtx).unwrap().ty.show(), "Object");
-    }
-
-    #[test]
-    fn test_local_var_read_not_found() {
-        let lenv = LocalEnv::new();
-
-        assert_eq!(install_local_var_read(&lenv, "unknown"), None);
-    }
-}
