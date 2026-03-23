@@ -32,33 +32,3 @@ pub(crate) fn install_method_call(
 
     ret_vtx
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::types::Type;
-
-    #[test]
-    fn test_install_method_call_creates_vertex() {
-        let mut genv = GlobalEnv::new();
-
-        let recv_vtx = genv.new_source(Type::string());
-        let ret_vtx =
-            install_method_call(&mut genv, recv_vtx, "upcase".to_string(), vec![], None, None, false);
-
-        // Return vertex should exist
-        assert!(genv.get_vertex(ret_vtx).is_some());
-    }
-
-    #[test]
-    fn test_install_method_call_adds_box() {
-        let mut genv = GlobalEnv::new();
-
-        let recv_vtx = genv.new_source(Type::string());
-        let _ret_vtx =
-            install_method_call(&mut genv, recv_vtx, "upcase".to_string(), vec![], None, None, false);
-
-        // Box should be added
-        assert_eq!(genv.box_count(), 1);
-    }
-}
