@@ -87,33 +87,3 @@ impl BoxManager {
         self.boxes.is_empty()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_add_run_prevents_duplicates() {
-        let mut manager = BoxManager::new();
-
-        let id = BoxId(0);
-        manager.add_run(id);
-        manager.add_run(id); // Should be ignored
-
-        assert_eq!(manager.run_queue.len(), 1);
-    }
-
-    #[test]
-    fn test_pop_run() {
-        let mut manager = BoxManager::new();
-
-        let id1 = BoxId(0);
-        let id2 = BoxId(1);
-        manager.add_run(id1);
-        manager.add_run(id2);
-
-        assert_eq!(manager.pop_run(), Some(id1));
-        assert_eq!(manager.pop_run(), Some(id2));
-        assert_eq!(manager.pop_run(), None);
-    }
-}

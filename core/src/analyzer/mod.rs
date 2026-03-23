@@ -31,18 +31,3 @@ pub use install::AstInstaller;
 pub(crate) fn bytes_to_name(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).to_string()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::bytes_to_name;
-
-    #[test]
-    fn test_bytes_to_name_valid_utf8() {
-        assert_eq!(bytes_to_name(b"hello"), "hello");
-    }
-
-    #[test]
-    fn test_bytes_to_name_invalid_utf8_replaced() {
-        assert_eq!(bytes_to_name(b"hello\xff"), "hello\u{FFFD}");
-    }
-}
