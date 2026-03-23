@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10] - 2026-03-24
+
+### Added
+
+- Add safe navigation operator (`&.`) support ([#65](https://github.com/dak2/method-ray/pull/65))
+- Add inheritance chain method resolution for user-defined classes ([#66](https://github.com/dak2/method-ray/pull/66))
+- Add extend support for module methods as class methods ([#67](https://github.com/dak2/method-ray/pull/67))
+- Add pull request template ([#82](https://github.com/dak2/method-ray/pull/82))
+
+### Changed
+
+- Migrate Rust integration tests to Ruby integration tests ([#68](https://github.com/dak2/method-ray/pull/68), [#69](https://github.com/dak2/method-ray/pull/69), [#70](https://github.com/dak2/method-ray/pull/70), [#71](https://github.com/dak2/method-ray/pull/71), [#72](https://github.com/dak2/method-ray/pull/72), [#73](https://github.com/dak2/method-ray/pull/73), [#74](https://github.com/dak2/method-ray/pull/74), [#75](https://github.com/dak2/method-ray/pull/75))
+- Remove redundant Rust unit tests ([#77](https://github.com/dak2/method-ray/pull/77), [#78](https://github.com/dak2/method-ray/pull/78), [#80](https://github.com/dak2/method-ray/pull/80), [#83](https://github.com/dak2/method-ray/pull/83), [#84](https://github.com/dak2/method-ray/pull/84), [#85](https://github.com/dak2/method-ray/pull/85), [#86](https://github.com/dak2/method-ray/pull/86))
+- Simplify README to focus on core value proposition ([#76](https://github.com/dak2/method-ray/pull/76))
+
+### Fixed
+
+- Fix release workflow to include gem assets in GitHub Release ([#63](https://github.com/dak2/method-ray/pull/63), [#64](https://github.com/dak2/method-ray/pull/64))
+
 ## [0.1.9] - 2026-03-15
 
 ### Added
@@ -140,6 +159,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - `methodray check` - Static type checking for Ruby files
 
+[0.1.10]: https://github.com/dak2/method-ray/releases/tag/v0.1.10
 [0.1.9]: https://github.com/dak2/method-ray/releases/tag/v0.1.9
 [0.1.8]: https://github.com/dak2/method-ray/releases/tag/v0.1.8
 [0.1.7]: https://github.com/dak2/method-ray/releases/tag/v0.1.7
