@@ -14,8 +14,8 @@ use ruby_prism::Node;
 use super::bytes_to_name;
 use super::calls::install_method_call;
 use super::variables::{
-    install_ivar_read, install_ivar_write, install_local_var_read, install_local_var_write,
-    install_self,
+    install_class_var_read, install_class_var_write, install_ivar_read, install_ivar_write,
+    install_local_var_read, install_local_var_write, install_self,
 };
 
 /// Collect positional and keyword arguments from AST argument nodes.
@@ -77,6 +77,8 @@ pub(crate) enum DispatchResult {
 pub(crate) enum NeedsChildKind<'a> {
     /// Instance variable write: need to process value, then call finish_ivar_write
     IvarWrite { ivar_name: String, value: Node<'a> },
+    /// Class variable write: need to process value, then call install_class_var_write
+    ClassVarWrite { cvar_name: String, value: Node<'a> },
     /// Local variable write: need to process value, then call finish_local_var_write
     LocalVarWrite { var_name: String, value: Node<'a> },
     /// Method call: need to process receiver, then call finish_method_call
@@ -126,6 +128,15 @@ pub(crate) fn dispatch_simple(genv: &mut GlobalEnv, lenv: &mut LocalEnv, node: &
     if let Some(ivar_read) = node.as_instance_variable_read_node() {
         let ivar_name = bytes_to_name(ivar_read.name().as_slice());
         return match install_ivar_read(genv, &ivar_name) {
+            Some(vtx) => DispatchResult::Vertex(vtx),
+            None => DispatchResult::NotHandled,
+        };
+    }
+
+    // Class variable read: @@name
+    if let Some(cvar_read) = node.as_class_variable_read_node() {
+        let cvar_name = bytes_to_name(cvar_read.name().as_slice());
+        return match install_class_var_read(genv, &cvar_name) {
             Some(vtx) => DispatchResult::Vertex(vtx),
             None => DispatchResult::NotHandled,
         };
@@ -203,6 +214,15 @@ pub(crate) fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<
         return Some(NeedsChildKind::IvarWrite {
             ivar_name,
             value: ivar_write.value(),
+        });
+    }
+
+    // Class variable write: @@name = value
+    if let Some(cvar_write) = node.as_class_variable_write_node() {
+        let cvar_name = bytes_to_name(cvar_write.name().as_slice());
+        return Some(NeedsChildKind::ClassVarWrite {
+            cvar_name,
+            value: cvar_write.value(),
         });
     }
 
@@ -304,6 +324,10 @@ pub(crate) fn process_needs_child(
         NeedsChildKind::IvarWrite { ivar_name, value } => {
             let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
             Some(finish_ivar_write(genv, ivar_name, value_vtx))
+        }
+        NeedsChildKind::ClassVarWrite { cvar_name, value } => {
+            let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
+            Some(install_class_var_write(genv, cvar_name, value_vtx))
         }
         NeedsChildKind::LocalVarWrite { var_name, value } => {
             let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
