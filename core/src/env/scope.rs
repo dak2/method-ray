@@ -76,6 +76,16 @@ impl Scope {
     pub fn get_instance_var(&self, name: &str) -> Option<VertexId> {
         self.instance_vars.get(name).copied()
     }
+
+    /// Add class variable
+    pub fn set_class_var(&mut self, name: String, vtx: VertexId) {
+        self.class_vars.insert(name, vtx);
+    }
+
+    /// Get class variable
+    pub fn get_class_var(&self, name: &str) -> Option<VertexId> {
+        self.class_vars.get(name).copied()
+    }
 }
 
 /// Scope manager
@@ -295,5 +305,79 @@ impl ScopeManager {
                 scope.set_instance_var(name, vtx);
             }
         }
+    }
+
+    /// Lookup class variable in enclosing class scope.
+    ///
+    /// Note: Only searches `ScopeKind::Class` scopes. Module-scoped @@var and
+    /// inheritance-chain traversal are not supported in v0.2.0.
+    pub fn lookup_class_var(&self, name: &str) -> Option<VertexId> {
+        self.walk_scopes()
+            .find(|scope| matches!(&scope.kind, ScopeKind::Class { .. }))
+            .and_then(|scope| scope.get_class_var(name))
+    }
+
+    /// Set class variable in enclosing class scope.
+    ///
+    /// No-op if there is no enclosing `ScopeKind::Class` scope (e.g., top-level or module scope).
+    /// Module-scoped @@var support is planned for a future version.
+    pub fn set_class_var_in_class(&mut self, name: String, vtx: VertexId) {
+        let class_scope_id = self.walk_scopes()
+            .find(|scope| matches!(&scope.kind, ScopeKind::Class { .. }))
+            .map(|scope| scope.id);
+        if let Some(scope_id) = class_scope_id {
+            self.scopes
+                .get_mut(&scope_id)
+                .expect("scope id from walk_scopes must exist")
+                .set_class_var(name, vtx);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_class_var_set_and_get() {
+        let mut scope = Scope::new(ScopeId(0), ScopeKind::TopLevel, None);
+        let vtx = VertexId(1);
+        scope.set_class_var("@@count".to_string(), vtx);
+        assert_eq!(scope.get_class_var("@@count"), Some(vtx));
+        assert_eq!(scope.get_class_var("@@missing"), None);
+    }
+
+    #[test]
+    fn test_lookup_class_var_from_method_scope() {
+        let mut manager = ScopeManager::new();
+
+        // Class scope
+        let class_id = manager.new_scope(ScopeKind::Class {
+            name: "Counter".to_string(),
+            superclass: None,
+        });
+        manager.enter_scope(class_id);
+
+        let vtx = VertexId(42);
+        manager.set_class_var_in_class("@@count".to_string(), vtx);
+
+        // Method scope (inside the class)
+        let method_id = manager.new_scope(ScopeKind::Method {
+            name: "increment".to_string(),
+            receiver_type: Some("Counter".to_string()),
+            return_vertex: None,
+        });
+        manager.enter_scope(method_id);
+
+        // Should find @@count through the class scope
+        assert_eq!(manager.lookup_class_var("@@count"), Some(vtx));
+    }
+
+    #[test]
+    fn test_set_class_var_noop_without_class_scope() {
+        let mut manager = ScopeManager::new();
+        // At top-level, no class scope exists
+        manager.set_class_var_in_class("@@var".to_string(), VertexId(1));
+        assert_eq!(manager.lookup_class_var("@@var"), None);
     }
 }
