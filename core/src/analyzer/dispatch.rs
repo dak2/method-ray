@@ -14,8 +14,9 @@ use ruby_prism::Node;
 use super::bytes_to_name;
 use super::calls::install_method_call;
 use super::variables::{
-    install_class_var_read, install_class_var_write, install_ivar_read, install_ivar_write,
-    install_local_var_read, install_local_var_write, install_self,
+    install_class_var_read, install_class_var_write, install_global_var_read,
+    install_global_var_write, install_ivar_read, install_ivar_write, install_local_var_read,
+    install_local_var_write, install_self,
 };
 
 /// Collect positional and keyword arguments from AST argument nodes.
@@ -81,6 +82,8 @@ pub(crate) enum NeedsChildKind<'a> {
     ClassVarWrite { cvar_name: String, value: Node<'a> },
     /// Local variable write: need to process value, then call finish_local_var_write
     LocalVarWrite { var_name: String, value: Node<'a> },
+    /// Global variable write: need to process value, then call install_global_var_write
+    GlobalVarWrite { gvar_name: String, value: Node<'a> },
     /// Method call: need to process receiver, then call finish_method_call
     MethodCall {
         receiver: Node<'a>,
@@ -140,6 +143,19 @@ pub(crate) fn dispatch_simple(genv: &mut GlobalEnv, lenv: &mut LocalEnv, node: &
             Some(vtx) => DispatchResult::Vertex(vtx),
             None => DispatchResult::NotHandled,
         };
+    }
+
+    // Global variable read: $name
+    // Ruby: uninitialized global variables are nil.
+    // Register the nil vertex so repeated reads of the same uninitialized
+    // variable reuse one vertex instead of allocating a new Source each time.
+    if let Some(gvar_read) = node.as_global_variable_read_node() {
+        let gvar_name = bytes_to_name(gvar_read.name().as_slice());
+        let vtx = install_global_var_read(genv, &gvar_name).unwrap_or_else(|| {
+            let nil_vtx = genv.new_source(Type::Nil);
+            install_global_var_write(genv, gvar_name, nil_vtx)
+        });
+        return DispatchResult::Vertex(vtx);
     }
 
     // self
@@ -223,6 +239,15 @@ pub(crate) fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<
         return Some(NeedsChildKind::ClassVarWrite {
             cvar_name,
             value: cvar_write.value(),
+        });
+    }
+
+    // Global variable write: $name = value
+    if let Some(gvar_write) = node.as_global_variable_write_node() {
+        let gvar_name = bytes_to_name(gvar_write.name().as_slice());
+        return Some(NeedsChildKind::GlobalVarWrite {
+            gvar_name,
+            value: gvar_write.value(),
         });
     }
 
@@ -328,6 +353,10 @@ pub(crate) fn process_needs_child(
         NeedsChildKind::ClassVarWrite { cvar_name, value } => {
             let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
             Some(install_class_var_write(genv, cvar_name, value_vtx))
+        }
+        NeedsChildKind::GlobalVarWrite { gvar_name, value } => {
+            let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
+            Some(install_global_var_write(genv, gvar_name, value_vtx))
         }
         NeedsChildKind::LocalVarWrite { var_name, value } => {
             let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;

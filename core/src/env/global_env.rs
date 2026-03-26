@@ -46,6 +46,9 @@ pub struct GlobalEnv {
 
     /// Module extensions: class_name → Vec<module_name> (in extend order)
     module_extensions: HashMap<String, Vec<String>>,
+
+    /// Global variables: $var_name → VertexId
+    global_variables: HashMap<String, VertexId>,
 }
 
 impl GlobalEnv {
@@ -59,6 +62,7 @@ impl GlobalEnv {
             module_inclusions: HashMap::new(),
             superclass_map: HashMap::new(),
             module_extensions: HashMap::new(),
+            global_variables: HashMap::new(),
         }
     }
 
@@ -232,6 +236,25 @@ impl GlobalEnv {
             param_vertices,
             keyword_param_vertices,
         );
+    }
+
+    // ===== Global Variables =====
+
+    /// Set a global variable. If it already exists, add an edge from value_vtx
+    /// to the existing vertex so types propagate. Otherwise, register value_vtx directly.
+    pub fn set_global_var(&mut self, name: String, value_vtx: VertexId) -> VertexId {
+        if let Some(&existing_vtx) = self.global_variables.get(&name) {
+            self.add_edge(value_vtx, existing_vtx);
+            existing_vtx
+        } else {
+            self.global_variables.insert(name, value_vtx);
+            value_vtx
+        }
+    }
+
+    /// Get the vertex for a global variable, if it has been registered.
+    pub fn get_global_var(&self, name: &str) -> Option<VertexId> {
+        self.global_variables.get(name).copied()
     }
 
     // ===== Type Errors =====

@@ -4,6 +4,7 @@
 //! - Local variable read/write (x, x = value)
 //! - Instance variable read/write (@name, @name = value)
 //! - Class variable read/write (@@name, @@name = value)
+//! - Global variable read/write ($var, $var = value)
 //! - self node handling
 
 use crate::env::{GlobalEnv, LocalEnv};
@@ -88,6 +89,22 @@ pub(crate) fn install_class_var_read(genv: &GlobalEnv, cvar_name: &str) -> Optio
     genv.scope_manager.lookup_class_var(cvar_name)
 }
 
+/// Install global variable write: $var = value
+///
+/// Delegates to [`GlobalEnv::set_global_var`] for edge behavior details.
+pub(crate) fn install_global_var_write(
+    genv: &mut GlobalEnv,
+    gvar_name: String,
+    value_vtx: VertexId,
+) -> VertexId {
+    genv.set_global_var(gvar_name, value_vtx)
+}
+
+/// Install global variable read: $var
+pub(crate) fn install_global_var_read(genv: &GlobalEnv, gvar_name: &str) -> Option<VertexId> {
+    genv.get_global_var(gvar_name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,5 +157,53 @@ mod tests {
 
         // Second write returns the same VertexId (edge added, not overwritten)
         assert_eq!(vtx1, vtx2);
+    }
+
+    #[test]
+    fn test_global_var_write_and_read() {
+        let mut genv = GlobalEnv::new();
+        let value_vtx = genv.new_source(Type::instance("String"));
+        let result_vtx = install_global_var_write(&mut genv, "$config".to_string(), value_vtx);
+        assert_eq!(result_vtx, value_vtx);
+
+        let read_vtx = install_global_var_read(&genv, "$config");
+        assert_eq!(read_vtx, Some(value_vtx));
+    }
+
+    #[test]
+    fn test_global_var_read_unregistered() {
+        let genv = GlobalEnv::new();
+        let read_vtx = install_global_var_read(&genv, "$unknown");
+        assert_eq!(read_vtx, None);
+    }
+
+    #[test]
+    fn test_global_var_write_twice_returns_same_vertex() {
+        let mut genv = GlobalEnv::new();
+        let vtx1 = genv.new_source(Type::instance("String"));
+        let first = install_global_var_write(&mut genv, "$data".to_string(), vtx1);
+
+        let vtx2 = genv.new_source(Type::instance("Integer"));
+        let second = install_global_var_write(&mut genv, "$data".to_string(), vtx2);
+
+        // Both writes should return the same VertexId (the first one registered)
+        assert_eq!(first, second);
+        // Read should also return the first vertex
+        assert_eq!(install_global_var_read(&genv, "$data"), Some(first));
+    }
+
+    #[test]
+    fn test_global_var_write_twice_propagates_via_vertex() {
+        let mut genv = GlobalEnv::new();
+        // Use a Vertex (not Source) as the initial value so type propagation works
+        let var_vtx = genv.new_vertex();
+        install_global_var_write(&mut genv, "$data".to_string(), var_vtx);
+
+        // Second write with a Source should propagate types into the Vertex
+        let str_src = genv.new_source(Type::instance("String"));
+        install_global_var_write(&mut genv, "$data".to_string(), str_src);
+
+        let types = genv.get_receiver_types(var_vtx).unwrap();
+        assert!(types.contains(&Type::instance("String")));
     }
 }
