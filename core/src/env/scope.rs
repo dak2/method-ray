@@ -326,10 +326,9 @@ impl ScopeManager {
             .find(|scope| matches!(&scope.kind, ScopeKind::Class { .. }))
             .map(|scope| scope.id);
         if let Some(scope_id) = class_scope_id {
-            self.scopes
-                .get_mut(&scope_id)
-                .expect("scope id from walk_scopes must exist")
-                .set_class_var(name, vtx);
+            if let Some(scope) = self.scopes.get_mut(&scope_id) {
+                scope.set_class_var(name, vtx);
+            }
         }
     }
 }

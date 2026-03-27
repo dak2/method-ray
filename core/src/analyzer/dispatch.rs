@@ -137,12 +137,17 @@ pub(crate) fn dispatch_simple(genv: &mut GlobalEnv, lenv: &mut LocalEnv, node: &
     }
 
     // Class variable read: @@name
+    // Ruby: uninitialized class variables raise NameError at runtime.
+    // We fall back to nil so downstream method calls are still type-checked
+    // rather than silently skipped. This may produce nil-union types when
+    // reads precede writes in source order.
     if let Some(cvar_read) = node.as_class_variable_read_node() {
         let cvar_name = bytes_to_name(cvar_read.name().as_slice());
-        return match install_class_var_read(genv, &cvar_name) {
-            Some(vtx) => DispatchResult::Vertex(vtx),
-            None => DispatchResult::NotHandled,
-        };
+        let vtx = install_class_var_read(genv, &cvar_name).unwrap_or_else(|| {
+            let nil_vtx = genv.new_source(Type::Nil);
+            install_class_var_write(genv, cvar_name, nil_vtx)
+        });
+        return DispatchResult::Vertex(vtx);
     }
 
     // Global variable read: $name
