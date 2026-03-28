@@ -1,4 +1,4 @@
-//! Conditionals - if/unless/case type inference
+ //! Conditionals - if/unless/case type inference
 //!
 //! Collects types from each branch and merges them into a Union
 //! via edges into a single result Vertex.
@@ -6,9 +6,14 @@
 use crate::env::{GlobalEnv, LocalEnv};
 use crate::graph::{ChangeSet, VertexId};
 use crate::types::Type;
-use ruby_prism::{CaseNode, ElseNode, IfNode, Node, UnlessNode, WhenNode};
+use ruby_prism::{
+    ArrayPatternNode, CapturePatternNode, CaseMatchNode, CaseNode, ElseNode, FindPatternNode,
+    HashPatternNode, IfNode, InNode, Node, UnlessNode, WhenNode,
+};
 
+use super::bytes_to_name;
 use super::install::{install_node, install_statements};
+use super::variables::install_local_var_write;
 
 /// Process IfNode: if/elsif/else chain
 pub(crate) fn process_if_node(
@@ -137,6 +142,47 @@ pub(crate) fn process_case_node(
     Some(result_vtx)
 }
 
+/// Process CaseMatchNode: case/in pattern matching
+pub(crate) fn process_case_match_node(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    node: &CaseMatchNode,
+) -> Option<VertexId> {
+    if let Some(pred) = node.predicate() {
+        install_node(genv, lenv, changes, source, &pred);
+    }
+
+    let result_vtx = genv.new_vertex();
+
+    for condition in &node.conditions() {
+        if let Some(in_node) = condition.as_in_node() {
+            let vtx = process_in_clause(genv, lenv, changes, source, &in_node);
+            if let Some(vtx) = vtx {
+                genv.add_edge(vtx, result_vtx);
+            }
+        }
+    }
+
+    let has_else = if let Some(else_node) = node.else_clause() {
+        let vtx = process_else_clause(genv, lenv, changes, source, &else_node);
+        if let Some(vtx) = vtx {
+            genv.add_edge(vtx, result_vtx);
+        }
+        true
+    } else {
+        false
+    };
+
+    if !has_else {
+        let nil_vtx = genv.new_source(Type::Nil);
+        genv.add_edge(nil_vtx, result_vtx);
+    }
+
+    Some(result_vtx)
+}
+
 /// Process subsequent node (elsif chain or else)
 fn process_subsequent(
     genv: &mut GlobalEnv,
@@ -187,4 +233,204 @@ fn process_when_clause(
     when_node
         .statements()
         .and_then(|stmts| install_statements(genv, lenv, changes, source, &stmts))
+}
+
+/// Process InNode clause body
+fn process_in_clause(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    in_node: &InNode,
+) -> Option<VertexId> {
+    process_pattern(genv, lenv, changes, source, &in_node.pattern());
+    in_node
+        .statements()
+        .and_then(|s| install_statements(genv, lenv, changes, source, &s))
+}
+
+/// Dispatch pattern processing based on pattern type
+fn process_pattern(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    pattern: &Node,
+) {
+    // Guard pattern (in x if condition)
+    if let Some(if_node) = pattern.as_if_node() {
+        if let Some(stmts) = if_node.statements() {
+            for stmt in &stmts.body() {
+                process_pattern(genv, lenv, changes, source, &stmt);
+            }
+        }
+        install_node(genv, lenv, changes, source, &if_node.predicate());
+        return;
+    }
+
+    if let Some(cap) = pattern.as_capture_pattern_node() {
+        process_capture_pattern(genv, lenv, changes, source, &cap);
+        return;
+    }
+
+    // ImplicitNode: hash shorthand pattern { name: } wraps LocalVariableTargetNode
+    if let Some(implicit) = pattern.as_implicit_node() {
+        process_pattern(genv, lenv, changes, source, &implicit.value());
+        return;
+    }
+
+    // LocalVariableTargetNode: single variable binding (in x)
+    if let Some(target) = pattern.as_local_variable_target_node() {
+        let var_name = bytes_to_name(target.name().as_slice());
+        let bot_vtx = genv.new_source(Type::Bot);
+        install_local_var_write(genv, lenv, changes, var_name, bot_vtx);
+        return;
+    }
+
+    if let Some(arr) = pattern.as_array_pattern_node() {
+        process_array_pattern(genv, lenv, changes, source, &arr);
+        return;
+    }
+
+    if let Some(find) = pattern.as_find_pattern_node() {
+        process_find_pattern(genv, lenv, changes, source, &find);
+        return;
+    }
+
+    if let Some(hash) = pattern.as_hash_pattern_node() {
+        process_hash_pattern(genv, lenv, changes, source, &hash);
+        return;
+    }
+
+    // AlternationPatternNode: 1 | 2 | 3
+    if let Some(alt) = pattern.as_alternation_pattern_node() {
+        process_pattern(genv, lenv, changes, source, &alt.left());
+        process_pattern(genv, lenv, changes, source, &alt.right());
+        return;
+    }
+
+    // PinnedVariableNode: ^x
+    if let Some(pinned) = pattern.as_pinned_variable_node() {
+        install_node(genv, lenv, changes, source, &pinned.variable());
+        return;
+    }
+
+    // PinnedExpressionNode: ^(expr)
+    if let Some(pinned) = pattern.as_pinned_expression_node() {
+        install_node(genv, lenv, changes, source, &pinned.expression());
+        return;
+    }
+
+    // Literal patterns (Integer, String, etc.) - side effects only
+    install_node(genv, lenv, changes, source, pattern);
+}
+
+/// Process capture pattern: Integer => x, Api::User => u
+fn process_capture_pattern(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    cap: &CapturePatternNode,
+) {
+    let value_node = cap.value();
+    let target = cap.target();
+    let var_name = bytes_to_name(target.name().as_slice());
+
+    let type_vtx = if let Some(name) = super::definitions::extract_constant_path(&value_node) {
+        genv.new_source(Type::instance(&name))
+    } else {
+        install_node(genv, lenv, changes, source, &value_node)
+            .unwrap_or_else(|| genv.new_vertex())
+    };
+
+    install_local_var_write(genv, lenv, changes, var_name, type_vtx);
+}
+
+/// Process array pattern: [x, y] or [x, *rest]
+fn process_array_pattern(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    arr: &ArrayPatternNode,
+) {
+    for elem in &arr.requireds() {
+        process_pattern(genv, lenv, changes, source, &elem);
+    }
+
+    if let Some(target) = arr
+        .rest()
+        .and_then(|r| r.as_splat_node())
+        .and_then(|s| s.expression())
+        .and_then(|e| e.as_local_variable_target_node())
+    {
+        let var_name = bytes_to_name(target.name().as_slice());
+        let array_vtx = genv.new_source(Type::array_of(Type::Bot));
+        install_local_var_write(genv, lenv, changes, var_name, array_vtx);
+    }
+
+    for elem in &arr.posts() {
+        process_pattern(genv, lenv, changes, source, &elem);
+    }
+}
+
+/// Process hash pattern: { name:, age: }
+fn process_hash_pattern(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    hash: &HashPatternNode,
+) {
+    for elem in &hash.elements() {
+        if let Some(assoc) = elem.as_assoc_node() {
+            process_pattern(genv, lenv, changes, source, &assoc.value());
+        }
+    }
+
+    if let Some(target) = hash
+        .rest()
+        .and_then(|r| r.as_assoc_splat_node())
+        .and_then(|s| s.value())
+        .and_then(|v| v.as_local_variable_target_node())
+    {
+        let var_name = bytes_to_name(target.name().as_slice());
+        let hash_vtx = genv.new_source(Type::instance("Hash"));
+        install_local_var_write(genv, lenv, changes, var_name, hash_vtx);
+    }
+}
+
+/// Process find pattern: [*, x, *]
+fn process_find_pattern(
+    genv: &mut GlobalEnv,
+    lenv: &mut LocalEnv,
+    changes: &mut ChangeSet,
+    source: &str,
+    find: &FindPatternNode,
+) {
+    if let Some(target) = find
+        .left()
+        .expression()
+        .and_then(|e| e.as_local_variable_target_node())
+    {
+        let var_name = bytes_to_name(target.name().as_slice());
+        let array_vtx = genv.new_source(Type::array_of(Type::Bot));
+        install_local_var_write(genv, lenv, changes, var_name, array_vtx);
+    }
+
+    for elem in &find.requireds() {
+        process_pattern(genv, lenv, changes, source, &elem);
+    }
+
+    if let Some(target) = find
+        .right()
+        .as_splat_node()
+        .and_then(|s| s.expression())
+        .and_then(|e| e.as_local_variable_target_node())
+    {
+        let var_name = bytes_to_name(target.name().as_slice());
+        let array_vtx = genv.new_source(Type::array_of(Type::Bot));
+        install_local_var_write(genv, lenv, changes, var_name, array_vtx);
+    }
 }
