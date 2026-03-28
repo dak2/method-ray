@@ -7,6 +7,7 @@ mod definitions;
 mod exceptions;
 mod dispatch;
 mod install;
+mod lambdas;
 mod literals;
 mod loops;
 mod operators;

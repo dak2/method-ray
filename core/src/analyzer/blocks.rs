@@ -56,7 +56,7 @@ pub(crate) fn process_block_node_with_params(
 }
 
 /// Install block parameters and return their vertex IDs
-fn install_block_parameters_with_vtxs(
+pub(crate) fn install_block_parameters_with_vtxs(
     genv: &mut GlobalEnv,
     lenv: &mut LocalEnv,
     changes: &mut ChangeSet,

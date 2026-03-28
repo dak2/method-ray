@@ -85,6 +85,8 @@ pub(crate) enum NeedsChildKind<'a> {
     /// Global variable write: need to process value, then call install_global_var_write
     GlobalVarWrite { gvar_name: String, value: Node<'a> },
     ConstantWrite { const_name: String, value: Node<'a> },
+    /// Proc/lambda literals
+    ProcLiteral { block: Node<'a> },
     /// Method call: need to process receiver, then call finish_method_call
     MethodCall {
         receiver: Node<'a>,
@@ -289,6 +291,16 @@ pub(crate) fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<
             .unwrap_or_default();
 
         if let Some(receiver) = call_node.receiver() {
+            if method_name == "new" {
+                if let Some(const_read) = receiver.as_constant_read_node() {
+                    if const_read.name().as_slice() == b"Proc" {
+                        if let Some(block_node) = block {
+                            return Some(NeedsChildKind::ProcLiteral { block: block_node });
+                        }
+                    }
+                }
+            }
+
             // Explicit receiver: x.upcase, x.each { |i| ... }
             let prism_location = call_node
                 .call_operator_loc()
@@ -306,6 +318,12 @@ pub(crate) fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<
             });
         } else {
             // No receiver: implicit self method call (e.g., `name`, `puts "hello"`)
+
+            if matches!(method_name.as_str(), "lambda" | "proc") {
+                if let Some(block_node) = block {
+                    return Some(NeedsChildKind::ProcLiteral { block: block_node });
+                }
+            }
 
             if let Some(kind) = match method_name.as_str() {
                 "attr_reader" => Some(AttrKind::Reader),
@@ -384,6 +402,13 @@ pub(crate) fn process_needs_child(
         NeedsChildKind::LocalVarWrite { var_name, value } => {
             let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
             Some(install_local_var_write(genv, lenv, changes, var_name, value_vtx))
+        }
+        NeedsChildKind::ProcLiteral { block } => {
+            if let Some(block_node) = block.as_block_node() {
+                super::lambdas::process_block_as_proc(genv, lenv, changes, source, &block_node)
+            } else {
+                None
+            }
         }
         NeedsChildKind::MethodCall {
             receiver,

@@ -141,6 +141,10 @@ pub enum Type {
     Union(Vec<Type>),
     /// Bottom type: no type information
     Bot,
+    Proc {
+        return_vertex: Option<crate::graph::VertexId>,
+        param_vertices: Vec<crate::graph::VertexId>,
+    },
 }
 
 impl Type {
@@ -159,6 +163,10 @@ impl Type {
                 names.join(" | ")
             }
             Type::Bot => "untyped".to_string(),
+            Type::Proc { param_vertices, .. } => {
+                let params = vec!["untyped"; param_vertices.len()];
+                format!("Proc[({})->untyped]", params.join(", "))
+            }
         }
     }
 
@@ -274,6 +282,16 @@ impl Type {
         Type::Generic {
             name: QualifiedName::simple("Range"),
             type_args: vec![element_type],
+        }
+    }
+
+    pub fn proc_type_with_vertex(
+        return_vertex: crate::graph::VertexId,
+        param_vertices: Vec<crate::graph::VertexId>,
+    ) -> Self {
+        Type::Proc {
+            return_vertex: Some(return_vertex),
+            param_vertices,
         }
     }
 
@@ -417,4 +435,20 @@ mod tests {
         assert_eq!(singleton.show(), "singleton(Api::User)");
         assert_eq!(singleton.base_class_name(), Some("Api::User"));
     }
+
+    #[test]
+    fn test_proc_type_show() {
+        let proc_ty = Type::Proc {
+            return_vertex: None,
+            param_vertices: vec![crate::graph::VertexId(99)],
+        };
+        assert_eq!(proc_ty.show(), "Proc[(untyped)->untyped]");
+
+        let proc_no_params = Type::Proc {
+            return_vertex: None,
+            param_vertices: vec![],
+        };
+        assert_eq!(proc_no_params.show(), "Proc[()->untyped]");
+    }
+
 }

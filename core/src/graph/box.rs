@@ -112,6 +112,17 @@ impl MethodCallBox {
             return;
         }
 
+        if let Type::Proc { return_vertex, param_vertices, .. } = recv_ty {
+            if self.method_name == "call" {
+                if let Some(merge_vtx) = return_vertex {
+                    changes.add_edge(*merge_vtx, self.ret);
+                }
+                propagate_arguments(&self.arg_vtxs, Some(param_vertices), changes);
+            }
+            // TODO: Proc#arity, Proc#curry etc. not yet resolved via RBS
+            return;
+        }
+
         if let Some(method_info) = genv.resolve_method(recv_ty, &self.method_name) {
             if let Some(return_vtx) = method_info.return_vertex {
                 // User-defined method: connect body's return vertex to call site

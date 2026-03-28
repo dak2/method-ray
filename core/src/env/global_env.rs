@@ -360,6 +360,16 @@ impl GlobalEnv {
         scope_id
     }
 
+    /// Enter a lambda scope
+    pub fn enter_lambda(&mut self) -> (ScopeId, VertexId) {
+        let merge_vtx = self.new_vertex();
+        let scope_id = self.scope_manager.new_scope(ScopeKind::Lambda {
+            return_vertex: Some(merge_vtx),
+        });
+        self.scope_manager.enter_scope(scope_id);
+        (scope_id, merge_vtx)
+    }
+
     /// Exit current scope
     pub fn exit_scope(&mut self) {
         self.scope_manager.exit_scope();
