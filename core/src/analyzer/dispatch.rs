@@ -14,9 +14,9 @@ use ruby_prism::Node;
 use super::bytes_to_name;
 use super::calls::install_method_call;
 use super::variables::{
-    install_class_var_read, install_class_var_write, install_global_var_read,
-    install_global_var_write, install_ivar_read, install_ivar_write, install_local_var_read,
-    install_local_var_write, install_self,
+    install_class_var_read, install_class_var_write, install_constant_read, install_constant_write,
+    install_global_var_read, install_global_var_write, install_ivar_read, install_ivar_write,
+    install_local_var_read, install_local_var_write, install_self,
 };
 
 /// Collect positional and keyword arguments from AST argument nodes.
@@ -76,14 +76,15 @@ pub(crate) enum DispatchResult {
 
 /// Kind of child processing needed
 pub(crate) enum NeedsChildKind<'a> {
-    /// Instance variable write: need to process value, then call finish_ivar_write
+    /// Instance variable write: need to process value, then call install_ivar_write
     IvarWrite { ivar_name: String, value: Node<'a> },
     /// Class variable write: need to process value, then call install_class_var_write
     ClassVarWrite { cvar_name: String, value: Node<'a> },
-    /// Local variable write: need to process value, then call finish_local_var_write
+    /// Local variable write: need to process value, then call install_local_var_write
     LocalVarWrite { var_name: String, value: Node<'a> },
     /// Global variable write: need to process value, then call install_global_var_write
     GlobalVarWrite { gvar_name: String, value: Node<'a> },
+    ConstantWrite { const_name: String, value: Node<'a> },
     /// Method call: need to process receiver, then call finish_method_call
     MethodCall {
         receiver: Node<'a>,
@@ -180,6 +181,11 @@ pub(crate) fn dispatch_simple(genv: &mut GlobalEnv, lenv: &mut LocalEnv, node: &
     // ConstantReadNode: User → Type::Singleton("User") or Type::Singleton("Api::User")
     if let Some(const_read) = node.as_constant_read_node() {
         let name = bytes_to_name(const_read.name().as_slice());
+
+        if let Some(vtx) = install_constant_read(genv, &name) {
+            return DispatchResult::Vertex(vtx);
+        }
+
         let resolved_name = genv.scope_manager.lookup_constant(&name)
             .unwrap_or(name);
         let vtx = genv.new_source(Type::singleton(&resolved_name));
@@ -253,6 +259,14 @@ pub(crate) fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<
         return Some(NeedsChildKind::GlobalVarWrite {
             gvar_name,
             value: gvar_write.value(),
+        });
+    }
+
+    if let Some(const_write) = node.as_constant_write_node() {
+        let const_name = bytes_to_name(const_write.name().as_slice());
+        return Some(NeedsChildKind::ConstantWrite {
+            const_name,
+            value: const_write.value(),
         });
     }
 
@@ -353,7 +367,7 @@ pub(crate) fn process_needs_child(
     match kind {
         NeedsChildKind::IvarWrite { ivar_name, value } => {
             let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
-            Some(finish_ivar_write(genv, ivar_name, value_vtx))
+            Some(install_ivar_write(genv, ivar_name, value_vtx))
         }
         NeedsChildKind::ClassVarWrite { cvar_name, value } => {
             let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
@@ -363,9 +377,13 @@ pub(crate) fn process_needs_child(
             let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
             Some(install_global_var_write(genv, gvar_name, value_vtx))
         }
+        NeedsChildKind::ConstantWrite { const_name, value } => {
+            let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
+            Some(install_constant_write(genv, const_name, value_vtx))
+        }
         NeedsChildKind::LocalVarWrite { var_name, value } => {
             let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
-            Some(finish_local_var_write(genv, lenv, changes, var_name, value_vtx))
+            Some(install_local_var_write(genv, lenv, changes, var_name, value_vtx))
         }
         NeedsChildKind::MethodCall {
             receiver,
@@ -417,22 +435,6 @@ pub(crate) fn process_needs_child(
             None
         }
     }
-}
-
-/// Finish instance variable write after child is processed
-fn finish_ivar_write(genv: &mut GlobalEnv, ivar_name: String, value_vtx: VertexId) -> VertexId {
-    install_ivar_write(genv, ivar_name, value_vtx)
-}
-
-/// Finish local variable write after child is processed
-fn finish_local_var_write(
-    genv: &mut GlobalEnv,
-    lenv: &mut LocalEnv,
-    changes: &mut ChangeSet,
-    var_name: String,
-    value_vtx: VertexId,
-) -> VertexId {
-    install_local_var_write(genv, lenv, changes, var_name, value_vtx)
 }
 
 /// Bundled parameters for method call processing
