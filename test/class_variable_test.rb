@@ -41,10 +41,6 @@ class ClassVariableTest < Minitest::Test
     assert_no_check_errors(source)
   end
 
-  # ============================================
-  # Error Detection
-  # ============================================
-
   def test_class_variable_write_before_read
     source = <<~RUBY
       class Config
@@ -59,6 +55,10 @@ class ClassVariableTest < Minitest::Test
     RUBY
     assert_no_check_errors(source)
   end
+
+  # ============================================
+  # Error Detection
+  # ============================================
 
   def test_class_variable_type_error
     source = <<~RUBY
@@ -85,5 +85,54 @@ class ClassVariableTest < Minitest::Test
       end
     RUBY
     assert_check_error(source, method_name: 'length', receiver_type: 'Integer')
+  end
+
+  def test_class_variable_class_body_write_type_error
+    source = <<~RUBY
+      class Counter
+        @@count = 42
+
+        def display
+          @@count.upcase
+        end
+      end
+    RUBY
+    assert_check_error(source, method_name: 'upcase', receiver_type: 'Integer')
+  end
+
+  def test_class_variable_isolation_between_classes
+    source = <<~RUBY
+      class StringHolder
+        def setup
+          @@value = "hello"
+        end
+
+        def run
+          @@value.upcase
+        end
+      end
+
+      class IntHolder
+        def setup
+          @@value = 42
+        end
+
+        def run
+          @@value.upcase
+        end
+      end
+    RUBY
+    assert_check_error(source, method_name: 'upcase', receiver_type: 'Integer')
+  end
+
+  def test_class_variable_in_module_no_crash
+    source = <<~RUBY
+      module Config
+        @@setting = "production"
+      end
+    RUBY
+    # Module-scoped @@var is not yet supported (v0.2.0 limitation).
+    # The checker should not crash.
+    assert_no_check_errors(source)
   end
 end
