@@ -5,6 +5,7 @@
 //! - Instance variable read/write (@name, @name = value)
 //! - Class variable read/write (@@name, @@name = value)
 //! - Global variable read/write ($var, $var = value)
+//! - Constant read/write (CONST = value, CONST)
 //! - self node handling
 
 use crate::env::{GlobalEnv, LocalEnv};
@@ -105,6 +106,38 @@ pub(crate) fn install_global_var_read(genv: &GlobalEnv, gvar_name: &str) -> Opti
     genv.get_global_var(gvar_name)
 }
 
+pub(crate) fn install_constant_write(
+    genv: &mut GlobalEnv,
+    const_name: String,
+    value_vtx: VertexId,
+) -> VertexId {
+    let key = match genv.scope_manager.current_qualified_name() {
+        Some(ns) => format!("{}::{}", ns, const_name),
+        None => const_name,
+    };
+    genv.set_constant(key, value_vtx)
+}
+
+pub(crate) fn install_constant_read(
+    genv: &GlobalEnv,
+    const_name: &str,
+) -> Option<VertexId> {
+    if let Some(ns) = genv.scope_manager.current_qualified_name() {
+        let mut current_ns = ns.as_str();
+        loop {
+            let key = format!("{}::{}", current_ns, const_name);
+            if let Some(vtx) = genv.get_constant(&key) {
+                return Some(vtx);
+            }
+            match current_ns.rfind("::") {
+                Some(pos) => current_ns = &current_ns[..pos],
+                None => break,
+            }
+        }
+    }
+    genv.get_constant(const_name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -155,7 +188,6 @@ mod tests {
         let int_vtx = genv.new_source(Type::integer());
         let vtx2 = install_class_var_write(&mut genv, "@@var".to_string(), int_vtx);
 
-        // Second write returns the same VertexId (edge added, not overwritten)
         assert_eq!(vtx1, vtx2);
     }
 
@@ -186,24 +218,71 @@ mod tests {
         let vtx2 = genv.new_source(Type::instance("Integer"));
         let second = install_global_var_write(&mut genv, "$data".to_string(), vtx2);
 
-        // Both writes should return the same VertexId (the first one registered)
         assert_eq!(first, second);
-        // Read should also return the first vertex
         assert_eq!(install_global_var_read(&genv, "$data"), Some(first));
     }
 
     #[test]
     fn test_global_var_write_twice_propagates_via_vertex() {
         let mut genv = GlobalEnv::new();
-        // Use a Vertex (not Source) as the initial value so type propagation works
         let var_vtx = genv.new_vertex();
         install_global_var_write(&mut genv, "$data".to_string(), var_vtx);
 
-        // Second write with a Source should propagate types into the Vertex
         let str_src = genv.new_source(Type::instance("String"));
         install_global_var_write(&mut genv, "$data".to_string(), str_src);
 
         let types = genv.get_receiver_types(var_vtx).unwrap();
         assert!(types.contains(&Type::instance("String")));
+    }
+
+    #[test]
+    fn test_constant_write_twice_merges() {
+        let mut genv = GlobalEnv::new();
+        let str_vtx = genv.new_source(Type::string());
+        let vtx1 = install_constant_write(&mut genv, "VAL".to_string(), str_vtx);
+
+        let int_vtx = genv.new_source(Type::integer());
+        let vtx2 = install_constant_write(&mut genv, "VAL".to_string(), int_vtx);
+
+        assert_eq!(vtx1, vtx2);
+    }
+
+    #[test]
+    fn test_constant_read_undefined() {
+        let genv = GlobalEnv::new();
+        assert_eq!(install_constant_read(&genv, "UNDEFINED"), None);
+    }
+
+    #[test]
+    fn test_constant_read_nested_namespace_walk() {
+        let mut genv = GlobalEnv::new();
+
+        genv.enter_class("Api".to_string(), None);
+        let api_vtx = genv.new_source(Type::string());
+        install_constant_write(&mut genv, "VERSION".to_string(), api_vtx);
+
+        genv.enter_class("V1".to_string(), None);
+        genv.enter_class("Users".to_string(), None);
+        genv.enter_method("index".to_string());
+
+        let read = install_constant_read(&genv, "VERSION");
+        assert_eq!(read, Some(api_vtx));
+    }
+
+    #[test]
+    fn test_constant_read_prefers_inner_namespace() {
+        let mut genv = GlobalEnv::new();
+
+        let top_vtx = genv.new_source(Type::string());
+        install_constant_write(&mut genv, "NAME".to_string(), top_vtx);
+
+        genv.enter_class("Config".to_string(), None);
+        let class_vtx = genv.new_source(Type::integer());
+        install_constant_write(&mut genv, "NAME".to_string(), class_vtx);
+
+        genv.enter_method("get_name".to_string());
+
+        let read = install_constant_read(&genv, "NAME");
+        assert_eq!(read, Some(class_vtx));
     }
 }

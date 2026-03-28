@@ -49,6 +49,8 @@ pub struct GlobalEnv {
 
     /// Global variables: $var_name → VertexId
     global_variables: HashMap<String, VertexId>,
+
+    constants: HashMap<String, VertexId>,
 }
 
 impl GlobalEnv {
@@ -63,6 +65,7 @@ impl GlobalEnv {
             superclass_map: HashMap::new(),
             module_extensions: HashMap::new(),
             global_variables: HashMap::new(),
+            constants: HashMap::new(),
         }
     }
 
@@ -268,6 +271,20 @@ impl GlobalEnv {
     ) {
         self.type_errors
             .push(TypeError::new(receiver_type, method_name, location));
+    }
+
+    pub fn set_constant(&mut self, key: String, value_vtx: VertexId) -> VertexId {
+        if let Some(&existing_vtx) = self.constants.get(&key) {
+            self.add_edge(value_vtx, existing_vtx);
+            existing_vtx
+        } else {
+            self.constants.insert(key, value_vtx);
+            value_vtx
+        }
+    }
+
+    pub fn get_constant(&self, key: &str) -> Option<VertexId> {
+        self.constants.get(key).copied()
     }
 
     // ===== Scope Management =====
