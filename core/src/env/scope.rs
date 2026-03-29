@@ -22,6 +22,9 @@ pub enum ScopeKind {
         return_vertex: Option<VertexId>, // Merge vertex for return statements
     },
     Block,
+    Lambda {
+        return_vertex: Option<VertexId>,
+    },
 }
 
 /// Scope information
@@ -277,14 +280,12 @@ impl ScopeManager {
         })
     }
 
-    /// Get return_vertex from the nearest enclosing method scope
+    /// Get return_vertex from the nearest enclosing method or lambda scope
     pub fn current_method_return_vertex(&self) -> Option<VertexId> {
-        self.walk_scopes().find_map(|scope| {
-            if let ScopeKind::Method { return_vertex, .. } = &scope.kind {
-                *return_vertex
-            } else {
-                None
-            }
+        self.walk_scopes().find_map(|scope| match &scope.kind {
+            ScopeKind::Method { return_vertex, .. } => *return_vertex,
+            ScopeKind::Lambda { return_vertex } => *return_vertex,
+            _ => None,
         })
     }
 

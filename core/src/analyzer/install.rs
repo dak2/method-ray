@@ -13,6 +13,7 @@ use super::blocks::process_block_node;
 use super::conditionals::{process_case_match_node, process_case_node, process_if_node, process_unless_node};
 use super::definitions::{process_class_node, process_def_node, process_module_node};
 use super::exceptions::{process_begin_node, process_rescue_modifier_node};
+use super::lambdas::process_lambda_node;
 use super::dispatch::{dispatch_needs_child, dispatch_simple, process_needs_child, DispatchResult};
 use super::literals::install_literal_node;
 use super::loops::{process_for_node, process_until_node, process_while_node};
@@ -71,6 +72,10 @@ pub(crate) fn install_node(
 
     if let Some(block_node) = node.as_block_node() {
         return process_block_node(genv, lenv, changes, source, &block_node);
+    }
+
+    if let Some(lambda_node) = node.as_lambda_node() {
+        return process_lambda_node(genv, lenv, changes, source, &lambda_node);
     }
 
     if let Some(if_node) = node.as_if_node() {
