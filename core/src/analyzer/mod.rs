@@ -2,6 +2,7 @@ mod assignments;
 mod attributes;
 mod blocks;
 mod calls;
+mod compound_assignments;
 mod conditionals;
 mod definitions;
 mod exceptions;

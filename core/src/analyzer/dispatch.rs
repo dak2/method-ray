@@ -13,6 +13,7 @@ use ruby_prism::Node;
 
 use super::bytes_to_name;
 use super::calls::install_method_call;
+use super::compound_assignments::{CompoundOp, CompoundVarKind};
 use super::variables::{
     install_class_var_read, install_class_var_write, install_constant_read, install_constant_write,
     install_global_var_read, install_global_var_write, install_ivar_read, install_ivar_write,
@@ -85,6 +86,11 @@ pub(crate) enum NeedsChildKind<'a> {
     /// Global variable write: need to process value, then call install_global_var_write
     GlobalVarWrite { gvar_name: String, value: Node<'a> },
     ConstantWrite { const_name: String, value: Node<'a> },
+    CompoundWrite {
+        var_kind: CompoundVarKind,
+        op: CompoundOp,
+        value: Node<'a>,
+    },
     /// Proc/lambda literals
     ProcLiteral { block: Node<'a> },
     /// Method call: need to process receiver, then call finish_method_call
@@ -281,6 +287,46 @@ pub(crate) fn dispatch_needs_child<'a>(node: &Node<'a>, source: &str) -> Option<
         });
     }
 
+    macro_rules! dispatch_compound {
+        ($node:expr, $as_method:ident, $var_kind:ident, operator) => {
+            if let Some(n) = $node.$as_method() {
+                return Some(NeedsChildKind::CompoundWrite {
+                    var_kind: CompoundVarKind::$var_kind(bytes_to_name(n.name().as_slice())),
+                    op: CompoundOp::Operator(bytes_to_name(n.binary_operator().as_slice())),
+                    value: n.value(),
+                });
+            }
+        };
+        ($node:expr, $as_method:ident, $var_kind:ident, $op:ident) => {
+            if let Some(n) = $node.$as_method() {
+                return Some(NeedsChildKind::CompoundWrite {
+                    var_kind: CompoundVarKind::$var_kind(bytes_to_name(n.name().as_slice())),
+                    op: CompoundOp::$op,
+                    value: n.value(),
+                });
+            }
+        };
+    }
+
+    macro_rules! dispatch_compound_all {
+        ($node:expr, $op_method:ident, $or_method:ident, $and_method:ident, $var_kind:ident) => {
+            dispatch_compound!($node, $op_method, $var_kind, operator);
+            dispatch_compound!($node, $or_method, $var_kind, Logical);
+            dispatch_compound!($node, $and_method, $var_kind, Logical);
+        };
+    }
+
+    dispatch_compound_all!(node,
+        as_local_variable_operator_write_node, as_local_variable_or_write_node, as_local_variable_and_write_node, Local);
+    dispatch_compound_all!(node,
+        as_instance_variable_operator_write_node, as_instance_variable_or_write_node, as_instance_variable_and_write_node, Ivar);
+    dispatch_compound_all!(node,
+        as_class_variable_operator_write_node, as_class_variable_or_write_node, as_class_variable_and_write_node, ClassVar);
+    dispatch_compound_all!(node,
+        as_global_variable_operator_write_node, as_global_variable_or_write_node, as_global_variable_and_write_node, GlobalVar);
+    dispatch_compound_all!(node,
+        as_constant_operator_write_node, as_constant_or_write_node, as_constant_and_write_node, Constant);
+
     // Method call: x.upcase, x.each { |i| ... }, or name (implicit self)
     if let Some(call_node) = node.as_call_node() {
         let method_name = bytes_to_name(call_node.name().as_slice());
@@ -402,6 +448,12 @@ pub(crate) fn process_needs_child(
         NeedsChildKind::LocalVarWrite { var_name, value } => {
             let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
             Some(install_local_var_write(genv, lenv, changes, var_name, value_vtx))
+        }
+        NeedsChildKind::CompoundWrite { var_kind, op, value } => {
+            let value_vtx = super::install::install_node(genv, lenv, changes, source, &value)?;
+            Some(super::compound_assignments::process_compound_write(
+                genv, lenv, changes, var_kind, op, value_vtx,
+            ))
         }
         NeedsChildKind::ProcLiteral { block } => {
             if let Some(block_node) = block.as_block_node() {
