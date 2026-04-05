@@ -58,6 +58,14 @@ pub(crate) fn install_literal_node(
         return Some(genv.new_source(Type::regexp()));
     }
 
+    // InterpolatedXStringNode: `command #{expr}` → String
+    if let Some(interp) = node.as_interpolated_x_string_node() {
+        for part in &interp.parts() {
+            super::install::install_node(genv, lenv, changes, source, &part);
+        }
+        return Some(genv.new_source(Type::string()));
+    }
+
     install_simple_literal(genv, node)
 }
 
@@ -86,6 +94,9 @@ fn install_simple_literal(genv: &mut GlobalEnv, node: &Node) -> Option<VertexId>
     }
     if node.as_regular_expression_node().is_some() {
         return Some(genv.new_source(Type::regexp()));
+    }
+    if node.as_x_string_node().is_some() {
+        return Some(genv.new_source(Type::string()));
     }
     None
 }

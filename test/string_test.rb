@@ -37,6 +37,18 @@ class StringTest < Minitest::Test
     assert_type 'x = "hello #{1 + 2}"', 'x', 'String'
   end
 
+  def test_backtick_string_literal
+    assert_type 'x = `test`', 'x', 'String'
+  end
+
+  def test_interpolated_backtick_string_literal
+    types = infer(<<~RUBY)
+      y = "test"
+      x = `var \#{y}`
+    RUBY
+    assert_equal 'String', types['x']
+  end
+
   # ============================================
   # No Error
   # ============================================
@@ -55,6 +67,25 @@ class StringTest < Minitest::Test
       x = "hello \#{name}"
       y = x.upcase.downcase
     RUBY
+    assert_no_check_errors(source)
+  end
+
+  def test_backtick_string_method_chain_no_error
+    source = <<~RUBY
+      x = `test`
+      y = x.upcase
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_interpolated_backtick_string_method_chain_no_error
+    source = <<~RUBY
+      x = "test"
+      y = `var \#{x}`
+      z = y.upcase
+    RUBY
+
     assert_no_check_errors(source)
   end
 
@@ -84,6 +115,33 @@ class StringTest < Minitest::Test
         end
       end
     RUBY
+    assert_check_error(source, method_name: 'ceil', receiver_type: 'String')
+  end
+
+  def test_backtick_string_type_error
+    source = <<~RUBY
+      class Runner
+        def run
+          x = `test`
+          y = x.ceil
+        end
+      end
+    RUBY
+
+    assert_check_error(source, method_name: 'ceil', receiver_type: 'String')
+  end
+
+  def test_interpolated_backtick_string_type_error
+    source = <<~RUBY
+      class Runner
+        def run
+          x = "/tmp"
+          y = `test \#{x}`
+          z = y.ceil
+        end
+      end
+    RUBY
+
     assert_check_error(source, method_name: 'ceil', receiver_type: 'String')
   end
 end
