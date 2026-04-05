@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-05
+
+### Added
+
+- Add pattern matching type inference ([#103](https://github.com/dak2/method-ray/pull/103))
+- Add Lambda/Proc type inference support ([#104](https://github.com/dak2/method-ray/pull/104))
+- Add compound assignment type inference ([#105](https://github.com/dak2/method-ray/pull/105))
+- Add `defined?` type inference support ([#106](https://github.com/dak2/method-ray/pull/106))
+- Add `yield` type inference support ([#107](https://github.com/dak2/method-ray/pull/107))
+- Add control flow keyword support (`break`, `next`, `retry`, `redo`) ([#108](https://github.com/dak2/method-ray/pull/108))
+- Add backtick string type inference ([#109](https://github.com/dak2/method-ray/pull/109))
+- Add predicate type propagation to pattern variables in `case...in` ([#110](https://github.com/dak2/method-ray/pull/110))
+- Add constant type inference support ([#102](https://github.com/dak2/method-ray/pull/102))
+- Add global variable (`$var`) type tracking ([#100](https://github.com/dak2/method-ray/pull/100))
+- Add class variable (`@@var`) type tracking ([#99](https://github.com/dak2/method-ray/pull/99))
+
+### Fixed
+
+- Fix uninitialized `@@var` reads silently skipping downstream type checking ([#101](https://github.com/dak2/method-ray/pull/101))
+- Fix release workflow not triggered after tag push ([#88](https://github.com/dak2/method-ray/pull/88))
+
 ## [0.1.10] - 2026-03-24
 
 ### Added
@@ -159,6 +180,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - `methodray check` - Static type checking for Ruby files
 
+[0.2.0]: https://github.com/dak2/method-ray/releases/tag/v0.2.0
 [0.1.10]: https://github.com/dak2/method-ray/releases/tag/v0.1.10
 [0.1.9]: https://github.com/dak2/method-ray/releases/tag/v0.1.9
 [0.1.8]: https://github.com/dak2/method-ray/releases/tag/v0.1.8
