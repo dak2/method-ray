@@ -21,6 +21,7 @@ use super::operators::{process_and_node, process_or_node};
 use super::parentheses::process_parentheses_node;
 use super::returns::process_return_node;
 use super::super_calls;
+use super::yields::process_yield_node;
 
 /// Build graph from AST (public API wrapper)
 pub struct AstInstaller<'a> {
@@ -125,6 +126,10 @@ pub(crate) fn install_node(
 
     if let Some(return_node) = node.as_return_node() {
         return process_return_node(genv, lenv, changes, source, &return_node);
+    }
+
+    if let Some(yield_node) = node.as_yield_node() {
+        return process_yield_node(genv, lenv, changes, source, &yield_node);
     }
 
     if let Some(and_node) = node.as_and_node() {
