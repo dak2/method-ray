@@ -132,6 +132,28 @@ pub(crate) fn install_node(
         return process_yield_node(genv, lenv, changes, source, &yield_node);
     }
 
+    if let Some(next_node) = node.as_next_node() {
+        if let Some(args) = next_node.arguments() {
+            for arg in args.arguments().iter() {
+                install_node(genv, lenv, changes, source, &arg);
+            }
+        }
+        return None;
+    }
+
+    if let Some(break_node) = node.as_break_node() {
+        if let Some(args) = break_node.arguments() {
+            for arg in args.arguments().iter() {
+                install_node(genv, lenv, changes, source, &arg);
+            }
+        }
+        return None;
+    }
+
+    if node.as_redo_node().is_some() || node.as_retry_node().is_some() {
+        return None;
+    }
+
     if let Some(and_node) = node.as_and_node() {
         return process_and_node(genv, lenv, changes, source, &and_node);
     }
