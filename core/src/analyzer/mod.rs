@@ -17,6 +17,7 @@ mod parentheses;
 mod returns;
 mod super_calls;
 mod variables;
+mod yields;
 
 pub use install::AstInstaller;
 
