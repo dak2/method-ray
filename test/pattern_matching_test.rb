@@ -142,9 +142,69 @@ class PatternMatchingTest < Minitest::Test
     assert_no_check_errors(source)
   end
 
+  def test_bare_variable_propagates_predicate_type
+    source = <<~RUBY
+      case 42
+      in x
+        x.even?
+      end
+    RUBY
+    assert_no_check_errors(source)
+  end
+
+  def test_array_pattern_propagates_element_type
+    source = <<~RUBY
+      case [1, 2, 3]
+      in [x, y, z]
+        x.even?
+      end
+    RUBY
+    assert_no_check_errors(source)
+  end
+
+  def test_find_pattern_propagates_element_type
+    source = <<~RUBY
+      case [1, 2, 3]
+      in [*pre, x, *post]
+        x.even?
+      end
+    RUBY
+    assert_no_check_errors(source)
+  end
+
+  def test_guard_pattern_propagates_predicate_type
+    source = <<~RUBY
+      case 42
+      in x if x > 0
+        x.even?
+      end
+    RUBY
+    assert_no_check_errors(source)
+  end
+
   # ============================================
   # Error Detection
   # ============================================
+
+  def test_bare_variable_type_error
+    source = <<~RUBY
+      case 42
+      in x
+        x.upcase
+      end
+    RUBY
+    assert_check_error(source, method_name: 'upcase', receiver_type: 'Integer')
+  end
+
+  def test_array_pattern_element_type_error
+    source = <<~RUBY
+      case [1, 2, 3]
+      in [x, y, z]
+        x.upcase
+      end
+    RUBY
+    assert_check_error(source, method_name: 'upcase', receiver_type: 'Integer')
+  end
 
   def test_capture_pattern_type_error
     source = <<~RUBY
