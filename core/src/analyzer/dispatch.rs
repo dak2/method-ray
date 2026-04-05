@@ -208,6 +208,16 @@ pub(crate) fn dispatch_simple(genv: &mut GlobalEnv, lenv: &mut LocalEnv, node: &
         }
     }
 
+    // defined?(expr) → String | nil (child expression is NOT evaluated)
+    if node.as_defined_node().is_some() {
+        let result_vtx = genv.new_vertex();
+        let str_vtx = genv.new_source(Type::string());
+        let nil_vtx = genv.new_source(Type::Nil);
+        genv.add_edge(str_vtx, result_vtx);
+        genv.add_edge(nil_vtx, result_vtx);
+        return DispatchResult::Vertex(result_vtx);
+    }
+
     DispatchResult::NotHandled
 }
 
@@ -589,4 +599,69 @@ fn finish_method_call(
     safe_navigation: bool,
 ) -> VertexId {
     install_method_call(genv, recv_vtx, method_name, arg_vtxs, kwarg_vtxs, Some(location), safe_navigation)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::analyzer::AstInstaller;
+    use crate::env::{GlobalEnv, LocalEnv};
+    use crate::parser::ParseSession;
+    use crate::types::Type;
+
+    fn parse_and_install(source: &str) -> GlobalEnv {
+        parse_and_install_with(source, |_| {})
+    }
+
+    fn parse_and_install_with_builtin(source: &str) -> GlobalEnv {
+        parse_and_install_with(source, |genv| {
+            genv.register_builtin_method(Type::string(), "upcase", Type::string());
+        })
+    }
+
+    fn parse_and_install_with(source: &str, setup: impl FnOnce(&mut GlobalEnv)) -> GlobalEnv {
+        let session = ParseSession::new();
+        let result = session.parse_source(source, "<test>").unwrap();
+        let mut genv = GlobalEnv::new();
+        setup(&mut genv);
+        let mut lenv = LocalEnv::new();
+        let mut installer = AstInstaller::new(&mut genv, &mut lenv, source);
+
+        let root = result.node();
+        if let Some(program_node) = root.as_program_node() {
+            let statements = program_node.statements();
+            for stmt in &statements.body() {
+                installer.install_node(&stmt);
+            }
+        }
+        installer.finish();
+        genv
+    }
+
+    #[test]
+    fn test_defined_no_error() {
+        let genv = parse_and_install("result = defined?(foo)");
+        assert!(genv.type_errors.is_empty());
+    }
+
+    #[test]
+    fn test_defined_result_is_string_or_nil() {
+        // Calling upcase on String | nil produces an error for the nil branch
+        let genv = parse_and_install_with_builtin(
+            "result = defined?(foo)\nresult.upcase",
+        );
+        assert!(
+            !genv.type_errors.is_empty(),
+            "defined? returns String | nil, so upcase should error on nil branch"
+        );
+    }
+
+    #[test]
+    fn test_defined_child_not_evaluated() {
+        // If child expression were evaluated, 42.upcase would produce a type error
+        let genv = parse_and_install_with_builtin("defined?(42.upcase)");
+        assert!(
+            genv.type_errors.is_empty(),
+            "Child expression of defined? should not be evaluated"
+        );
+    }
 }
