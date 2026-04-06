@@ -3,5 +3,5 @@ pub mod change_set;
 pub mod vertex;
 
 pub use change_set::{ChangeSet, EdgeUpdate};
-pub use r#box::{BlockParameterTypeBox, BoxId, BoxTrait, MethodCallBox};
+pub use r#box::{BlockParameterTypeBox, BlockReturnTypeBox, BoxId, BoxTrait, MethodCallBox};
 pub use vertex::{Source, Vertex, VertexId};

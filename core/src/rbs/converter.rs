@@ -3,6 +3,27 @@ use crate::types::Type;
 // RBS Type Converter
 pub struct RbsTypeConverter;
 
+/// Split type arguments by comma, respecting bracket nesting depth.
+/// e.g., "String, Array[Integer]" → ["String", "Array[Integer]"]
+fn split_type_args(s: &str) -> Vec<&str> {
+    let mut results = Vec::new();
+    let mut depth = 0;
+    let mut start = 0;
+    for (i, b) in s.bytes().enumerate() {
+        match b {
+            b'[' => depth += 1,
+            b']' => depth -= 1,
+            b',' if depth == 0 => {
+                results.push(s[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    results.push(s[start..].trim());
+    results
+}
+
 impl RbsTypeConverter {
     pub fn parse(rbs_type: &str) -> Type {
         // Handle union types
@@ -25,7 +46,25 @@ impl RbsTypeConverter {
             ]),
             "void" | "nil" => Type::Nil,
             "untyped" | "top" => Type::Bot,
-            _ => Type::instance(type_name),
+            _ => {
+                // Handle generic types: Array[Elem], Hash[K, V]
+                // Only parse as generic when base class name is non-empty (skip tuple-like `[...]`)
+                if let Some(bracket_start) = type_name.find('[') {
+                    if bracket_start > 0 && type_name.ends_with(']') {
+                        let base = &type_name[..bracket_start];
+                        let args_str = &type_name[bracket_start + 1..type_name.len() - 1];
+                        let type_args: Vec<Type> = split_type_args(args_str)
+                            .into_iter()
+                            .map(Self::parse)
+                            .collect();
+                        return Type::Generic {
+                            name: crate::types::QualifiedName::from(base),
+                            type_args,
+                        };
+                    }
+                }
+                Type::instance(type_name)
+            }
         }
     }
 }
@@ -83,5 +122,71 @@ mod tests {
             }
             _ => panic!("Expected Union type"),
         }
+    }
+
+    #[test]
+    fn test_parse_generic_single_arg() {
+        match RbsTypeConverter::parse("Array[Elem]") {
+            Type::Generic { name, type_args } => {
+                assert_eq!(name.full_name(), "Array");
+                assert_eq!(type_args.len(), 1);
+                match &type_args[0] {
+                    Type::Instance { name } => assert_eq!(name.full_name(), "Elem"),
+                    _ => panic!("Expected Instance for type arg"),
+                }
+            }
+            _ => panic!("Expected Generic type"),
+        }
+    }
+
+    #[test]
+    fn test_parse_generic_multiple_args() {
+        match RbsTypeConverter::parse("Hash[K, V]") {
+            Type::Generic { name, type_args } => {
+                assert_eq!(name.full_name(), "Hash");
+                assert_eq!(type_args.len(), 2);
+            }
+            _ => panic!("Expected Generic type"),
+        }
+    }
+
+    #[test]
+    fn test_parse_nested_generic() {
+        match RbsTypeConverter::parse("Hash[String, Array[Integer]]") {
+            Type::Generic { name, type_args } => {
+                assert_eq!(name.full_name(), "Hash");
+                assert_eq!(type_args.len(), 2);
+                match &type_args[0] {
+                    Type::Instance { name } => assert_eq!(name.full_name(), "String"),
+                    _ => panic!("Expected Instance for first arg"),
+                }
+                match &type_args[1] {
+                    Type::Generic { name, type_args } => {
+                        assert_eq!(name.full_name(), "Array");
+                        assert_eq!(type_args.len(), 1);
+                    }
+                    _ => panic!("Expected Generic for second arg"),
+                }
+            }
+            _ => panic!("Expected Generic type"),
+        }
+    }
+
+    #[test]
+    fn test_parse_bare_bracket_not_generic() {
+        // "[String]" should not be parsed as generic (bracket_start == 0)
+        match RbsTypeConverter::parse("[String]") {
+            Type::Instance { name } => assert_eq!(name.full_name(), "[String]"),
+            _ => panic!("Expected Instance type for bare bracket"),
+        }
+    }
+
+    #[test]
+    fn test_split_type_args_nested() {
+        let result = split_type_args("String, Array[Integer]");
+        assert_eq!(result, vec!["String", "Array[Integer]"]);
+
+        let result = split_type_args("Array[K, V], Integer");
+        assert_eq!(result, vec!["Array[K, V]", "Integer"]);
     }
 }

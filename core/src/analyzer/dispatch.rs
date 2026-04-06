@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use crate::env::{GlobalEnv, LocalEnv};
-use crate::graph::{BlockParameterTypeBox, ChangeSet, VertexId};
+use crate::graph::{BlockParameterTypeBox, BlockReturnTypeBox, ChangeSet, VertexId};
 use crate::source_map::SourceLocation;
 use crate::types::Type;
 use ruby_prism::Node;
@@ -558,34 +558,48 @@ fn process_method_call_common<'a>(
     let (positional_arg_vtxs, kwarg_vtxs) =
         collect_arguments(genv, lenv, changes, source, arguments.into_iter());
 
+    let ret_vtx = finish_method_call(
+        genv,
+        recv_vtx,
+        method_name.clone(),
+        positional_arg_vtxs,
+        kwarg_vtxs,
+        location,
+        safe_navigation,
+    );
+
     if let Some(block_node) = block {
         if let Some(block) = block_node.as_block_node() {
-            let param_vtxs = super::blocks::process_block_node_with_params(
+            let block_result = super::blocks::process_block_node_with_params(
                 genv, lenv, changes, source, &block,
             );
 
-            if !param_vtxs.is_empty() {
+            if !block_result.param_vtxs.is_empty() {
                 let box_id = genv.alloc_box_id();
                 let block_box = BlockParameterTypeBox::new(
                     box_id,
                     recv_vtx,
                     method_name.clone(),
-                    param_vtxs,
+                    block_result.param_vtxs,
                 );
                 genv.register_box(box_id, Box::new(block_box));
+            }
+
+            if let Some(body_vtx) = block_result.body_last_vtx {
+                let box_id = genv.alloc_box_id();
+                let ret_box = BlockReturnTypeBox::new(
+                    box_id,
+                    recv_vtx,
+                    method_name,
+                    body_vtx,
+                    ret_vtx,
+                );
+                genv.register_box(box_id, Box::new(ret_box));
             }
         }
     }
 
-    Some(finish_method_call(
-        genv,
-        recv_vtx,
-        method_name,
-        positional_arg_vtxs,
-        kwarg_vtxs,
-        location,
-        safe_navigation,
-    ))
+    Some(ret_vtx)
 }
 
 /// Finish method call after receiver is processed

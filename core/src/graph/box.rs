@@ -45,6 +45,75 @@ fn propagate_keyword_arguments(
     }
 }
 
+/// Receiver type variables are resolved by position-matching against the receiver's Generic type_args.
+fn is_type_variable_name(name: &str) -> bool {
+    matches!(
+        name,
+        "Elem" | "K" | "V" | "T" | "Element" | "Key" | "Value"
+    )
+}
+
+/// Block output type variables (e.g., U in `map { -> U }`) cannot be resolved from the receiver
+/// and are substituted by BlockReturnTypeBox using the block body's return type.
+fn is_block_type_variable_name(name: &str) -> bool {
+    matches!(name, "U" | "A" | "B" | "Out" | "In")
+}
+
+/// Resolve type variables in a return type using the receiver's type args.
+///
+/// When `block_return_type` is None, block type variables cause None to be returned
+/// (deferring to BlockReturnTypeBox). When provided, block type variables are
+/// substituted with the given type.
+fn resolve_return_type(
+    return_type: &Type,
+    recv_ty: &Type,
+    block_return_type: Option<&Type>,
+) -> Option<Type> {
+    match return_type {
+        Type::Instance { name } if is_block_type_variable_name(name.full_name()) => {
+            block_return_type.cloned()
+        }
+        Type::Instance { name } if is_type_variable_name(name.full_name()) => {
+            BlockParameterTypeBox::resolve_type_variable(return_type, recv_ty)
+        }
+        Type::Generic { name, type_args } => {
+            let mut resolved_args = Vec::with_capacity(type_args.len());
+            for arg in type_args {
+                match arg {
+                    Type::Instance { name: arg_name }
+                        if is_block_type_variable_name(arg_name.full_name()) =>
+                    {
+                        match block_return_type {
+                            Some(brt) => resolved_args.push(brt.clone()),
+                            None => return None,
+                        }
+                    }
+                    Type::Instance { name: arg_name }
+                        if is_type_variable_name(arg_name.full_name()) =>
+                    {
+                        match BlockParameterTypeBox::resolve_type_variable(arg, recv_ty) {
+                            Some(resolved) => resolved_args.push(resolved),
+                            None => return None,
+                        }
+                    }
+                    Type::Generic { .. } => {
+                        match resolve_return_type(arg, recv_ty, block_return_type) {
+                            Some(resolved) => resolved_args.push(resolved),
+                            None => return None,
+                        }
+                    }
+                    _ => resolved_args.push(arg.clone()),
+                }
+            }
+            Some(Type::Generic {
+                name: name.clone(),
+                type_args: resolved_args,
+            })
+        }
+        _ => Some(return_type.clone()),
+    }
+}
+
 /// Box representing a method call
 pub struct MethodCallBox {
     id: BoxId,
@@ -138,9 +207,13 @@ impl MethodCallBox {
                     changes,
                 );
             } else {
-                // Builtin/RBS method: create source with fixed return type
-                let ret_src_id = genv.new_source(method_info.return_type.clone());
-                changes.add_edge(ret_src_id, self.ret);
+                // Builtin/RBS method: resolve type variables from receiver's type args.
+                // If unresolvable variables remain (e.g., block's U in map → Array[U]),
+                // skip — BlockReturnTypeBox will add the resolved type.
+                if let Some(resolved) = resolve_return_type(&method_info.return_type, recv_ty, None) {
+                    let ret_src_id = genv.new_source(resolved);
+                    changes.add_edge(ret_src_id, self.ret);
+                }
             }
         } else if self.method_name == "new" {
             self.handle_new_call(recv_ty, genv, changes);
@@ -251,14 +324,6 @@ impl BlockParameterTypeBox {
         }
     }
 
-    /// Check if a type is a type variable name (e.g., Elem, K, V)
-    fn is_type_variable_name(name: &str) -> bool {
-        matches!(
-            name,
-            "Elem" | "K" | "V" | "T" | "U" | "A" | "B" | "Element" | "Key" | "Value" | "Out" | "In"
-        )
-    }
-
     /// Try to resolve a type variable from receiver's type arguments.
     ///
     /// For `Array[Integer]#each { |x| }`, the block param type is `Elem`.
@@ -267,9 +332,9 @@ impl BlockParameterTypeBox {
     /// Type variable mapping for common generic classes:
     /// - Array[Elem]: Elem → type_args[0]
     /// - Hash[K, V]: K → type_args[0], V → type_args[1]
-    fn resolve_type_variable(ty: &Type, recv_ty: &Type) -> Option<Type> {
+    pub(crate) fn resolve_type_variable(ty: &Type, recv_ty: &Type) -> Option<Type> {
         let type_var_name = match ty {
-            Type::Instance { name } if Self::is_type_variable_name(name.full_name()) => {
+            Type::Instance { name } if is_type_variable_name(name.full_name()) => {
                 name.full_name()
             }
             _ => return None, // Not a type variable
@@ -335,7 +400,9 @@ impl BoxTrait for BlockParameterTypeBox {
                                 // Type variable resolved (e.g., Elem → Integer)
                                 resolved
                             } else if let Type::Instance { name } = &param_type {
-                                if Self::is_type_variable_name(name.full_name()) {
+                                if is_type_variable_name(name.full_name())
+                                    || is_block_type_variable_name(name.full_name())
+                                {
                                     // Type variable couldn't be resolved, skip
                                     continue;
                                 } else {
@@ -354,5 +421,274 @@ impl BoxTrait for BlockParameterTypeBox {
                 }
             }
         }
+    }
+}
+
+/// Box for propagating block return type to method's generic return type.
+///
+/// For `[1,2].map { |x| x.to_s }`:
+/// - Observes block body's return vertex type (String)
+/// - Resolves method's RBS return type (Array[Elem])
+/// - Substitutes: Elem → block_return → Array[String]
+/// - Adds edge to method's return vertex
+pub struct BlockReturnTypeBox {
+    id: BoxId,
+    recv_vtx: VertexId,
+    method_name: String,
+    block_return_vtx: VertexId,
+    method_return_vtx: VertexId,
+    reschedule_count: u8,
+}
+
+impl BlockReturnTypeBox {
+    pub fn new(
+        id: BoxId,
+        recv_vtx: VertexId,
+        method_name: String,
+        block_return_vtx: VertexId,
+        method_return_vtx: VertexId,
+    ) -> Self {
+        Self {
+            id,
+            recv_vtx,
+            method_name,
+            block_return_vtx,
+            method_return_vtx,
+            reschedule_count: 0,
+        }
+    }
+
+    fn try_reschedule(&mut self, changes: &mut ChangeSet) {
+        if self.reschedule_count < MAX_RESCHEDULE_COUNT {
+            self.reschedule_count += 1;
+            changes.reschedule(self.id);
+        }
+    }
+}
+
+impl BoxTrait for BlockReturnTypeBox {
+    fn id(&self) -> BoxId {
+        self.id
+    }
+
+    fn ret(&self) -> VertexId {
+        self.method_return_vtx
+    }
+
+    fn run(&mut self, genv: &mut GlobalEnv, changes: &mut ChangeSet) {
+        let Some(recv_types) = genv.get_receiver_types(self.recv_vtx) else {
+            return;
+        };
+        if recv_types.is_empty() {
+            self.try_reschedule(changes);
+            return;
+        }
+
+        let block_return_types = match genv.get_receiver_types(self.block_return_vtx) {
+            Some(types) if !types.is_empty() => types,
+            _ => {
+                self.try_reschedule(changes);
+                return;
+            }
+        };
+
+        let block_return_union = Type::union_of(block_return_types);
+
+        for recv_ty in &recv_types {
+            let Some(info) = genv.resolve_method(recv_ty, &self.method_name) else {
+                continue;
+            };
+
+            // Reuse resolve_return_type with block_return_union to substitute
+            // both receiver type variables and block output type variables in one pass.
+            if let Some(resolved) =
+                resolve_return_type(&info.return_type, recv_ty, Some(&block_return_union))
+            {
+                let src = genv.new_source(resolved);
+                changes.add_edge(src, self.method_return_vtx);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::QualifiedName;
+
+    #[test]
+    fn test_is_type_variable_name() {
+        assert!(is_type_variable_name("Elem"));
+        assert!(is_type_variable_name("K"));
+        assert!(is_type_variable_name("V"));
+        assert!(is_type_variable_name("T"));
+        assert!(!is_type_variable_name("U"));
+        assert!(!is_type_variable_name("String"));
+        assert!(!is_type_variable_name("In"));
+    }
+
+    #[test]
+    fn test_is_block_type_variable_name() {
+        assert!(is_block_type_variable_name("U"));
+        assert!(is_block_type_variable_name("A"));
+        assert!(is_block_type_variable_name("B"));
+        assert!(is_block_type_variable_name("Out"));
+        assert!(is_block_type_variable_name("In"));
+        assert!(!is_block_type_variable_name("Elem"));
+        assert!(!is_block_type_variable_name("String"));
+    }
+
+    #[test]
+    fn test_resolve_return_type_passthrough() {
+        let recv = Type::instance("String");
+        let ret = Type::instance("Integer");
+        assert_eq!(resolve_return_type(&ret, &recv, None), Some(Type::instance("Integer")));
+    }
+
+    #[test]
+    fn test_resolve_return_type_receiver_type_variable() {
+        // Array[Integer]#first → Elem → Integer
+        let recv = Type::Generic {
+            name: QualifiedName::simple("Array"),
+            type_args: vec![Type::instance("Integer")],
+        };
+        let ret = Type::instance("Elem");
+        assert_eq!(resolve_return_type(&ret, &recv, None), Some(Type::instance("Integer")));
+    }
+
+    #[test]
+    fn test_resolve_return_type_block_type_variable_returns_none() {
+        let recv = Type::instance("Array");
+        let ret = Type::instance("U");
+        assert_eq!(resolve_return_type(&ret, &recv, None), None);
+    }
+
+    #[test]
+    fn test_resolve_return_type_generic_with_block_variable() {
+        // Array[U] should return None (U is a block type variable)
+        let recv = Type::Generic {
+            name: QualifiedName::simple("Array"),
+            type_args: vec![Type::instance("Integer")],
+        };
+        let ret = Type::Generic {
+            name: QualifiedName::simple("Array"),
+            type_args: vec![Type::instance("U")],
+        };
+        assert_eq!(resolve_return_type(&ret, &recv, None), None);
+    }
+
+    #[test]
+    fn test_resolve_return_type_generic_with_resolvable_variable() {
+        // Array[Elem] with recv Array[String] → Array[String]
+        let recv = Type::Generic {
+            name: QualifiedName::simple("Array"),
+            type_args: vec![Type::instance("String")],
+        };
+        let ret = Type::Generic {
+            name: QualifiedName::simple("Array"),
+            type_args: vec![Type::instance("Elem")],
+        };
+        let expected = Type::Generic {
+            name: QualifiedName::simple("Array"),
+            type_args: vec![Type::instance("String")],
+        };
+        assert_eq!(resolve_return_type(&ret, &recv, None), Some(expected));
+    }
+
+    #[test]
+    fn test_resolve_return_type_nested_generic_resolvable() {
+        // Hash[K, Array[Elem]] with recv Hash[String, Integer]
+        // K → String (Hash mapping), Elem → String (generic fallback: index 0)
+        let recv = Type::Generic {
+            name: QualifiedName::simple("Hash"),
+            type_args: vec![Type::instance("String"), Type::instance("Integer")],
+        };
+        let ret = Type::Generic {
+            name: QualifiedName::simple("Hash"),
+            type_args: vec![
+                Type::instance("K"),
+                Type::Generic {
+                    name: QualifiedName::simple("Array"),
+                    type_args: vec![Type::instance("Elem")],
+                },
+            ],
+        };
+        let expected = Type::Generic {
+            name: QualifiedName::simple("Hash"),
+            type_args: vec![
+                Type::instance("String"),
+                Type::Generic {
+                    name: QualifiedName::simple("Array"),
+                    type_args: vec![Type::instance("String")],
+                },
+            ],
+        };
+        assert_eq!(resolve_return_type(&ret, &recv, None), Some(expected));
+    }
+
+    #[test]
+    fn test_resolve_return_type_nested_generic_with_block_var() {
+        // Array[Array[U]] with recv Array[Integer] → None (U is block variable)
+        let recv = Type::Generic {
+            name: QualifiedName::simple("Array"),
+            type_args: vec![Type::instance("Integer")],
+        };
+        let ret = Type::Generic {
+            name: QualifiedName::simple("Array"),
+            type_args: vec![Type::Generic {
+                name: QualifiedName::simple("Array"),
+                type_args: vec![Type::instance("U")],
+            }],
+        };
+        assert_eq!(resolve_return_type(&ret, &recv, None), None);
+    }
+
+    #[test]
+    fn test_resolve_return_type_block_variable_with_substitution() {
+        // U with block_return_type=String → String
+        let recv = Type::instance("Array");
+        let ret = Type::instance("U");
+        let brt = Type::instance("String");
+        assert_eq!(
+            resolve_return_type(&ret, &recv, Some(&brt)),
+            Some(Type::instance("String"))
+        );
+    }
+
+    #[test]
+    fn test_resolve_return_type_generic_block_variable_with_substitution() {
+        // Array[U] with block_return_type=String → Array[String]
+        let recv = Type::Generic {
+            name: QualifiedName::simple("Array"),
+            type_args: vec![Type::instance("Integer")],
+        };
+        let ret = Type::Generic {
+            name: QualifiedName::simple("Array"),
+            type_args: vec![Type::instance("U")],
+        };
+        let brt = Type::instance("String");
+        let expected = Type::Generic {
+            name: QualifiedName::simple("Array"),
+            type_args: vec![Type::instance("String")],
+        };
+        assert_eq!(resolve_return_type(&ret, &recv, Some(&brt)), Some(expected));
+    }
+
+    #[test]
+    fn test_resolve_return_type_nested_generic_all_resolvable() {
+        // Hash[K, V] with recv Hash[String, Integer] → Hash[String, Integer]
+        let recv = Type::Generic {
+            name: QualifiedName::simple("Hash"),
+            type_args: vec![Type::instance("String"), Type::instance("Integer")],
+        };
+        let ret = Type::Generic {
+            name: QualifiedName::simple("Hash"),
+            type_args: vec![Type::instance("K"), Type::instance("V")],
+        };
+        let expected = Type::Generic {
+            name: QualifiedName::simple("Hash"),
+            type_args: vec![Type::instance("String"), Type::instance("Integer")],
+        };
+        assert_eq!(resolve_return_type(&ret, &recv, None), Some(expected));
     }
 }

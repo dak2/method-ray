@@ -27,7 +27,7 @@ class RangeTest < Minitest::Test
 
   def test_range_to_a_returns_array
     types = infer("x = 1..10\na = x.to_a")
-    assert_equal 'Array[Elem]', types['a']
+    assert_equal 'Array[Integer]', types['a']
   end
 
   def test_range_size_returns_integer

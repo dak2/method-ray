@@ -11,6 +11,12 @@ use crate::graph::{ChangeSet, VertexId};
 use super::bytes_to_name;
 use super::parameters::{install_optional_parameter, install_required_parameter, install_rest_parameter};
 
+/// Block processing result
+pub(crate) struct BlockResult {
+    pub param_vtxs: Vec<VertexId>,
+    pub body_last_vtx: Option<VertexId>,
+}
+
 /// Process block node
 pub(crate) fn process_block_node(
     genv: &mut GlobalEnv,
@@ -23,14 +29,14 @@ pub(crate) fn process_block_node(
     None
 }
 
-/// Process block node and return block parameter vertex IDs
+/// Process block node and return block parameter vertex IDs and body's last expression vertex
 pub(crate) fn process_block_node_with_params(
     genv: &mut GlobalEnv,
     lenv: &mut LocalEnv,
     changes: &mut ChangeSet,
     source: &str,
     block_node: &ruby_prism::BlockNode,
-) -> Vec<VertexId> {
+) -> BlockResult {
     enter_block_scope(genv);
 
     let mut param_vtxs = Vec::new();
@@ -42,17 +48,19 @@ pub(crate) fn process_block_node_with_params(
         }
     }
 
-    if let Some(body) = block_node.body() {
+    let body_last_vtx = if let Some(body) = block_node.body() {
         if let Some(statements) = body.as_statements_node() {
-            super::install::install_statements(genv, lenv, changes, source, &statements);
+            super::install::install_statements(genv, lenv, changes, source, &statements)
         } else {
-            super::install::install_node(genv, lenv, changes, source, &body);
+            super::install::install_node(genv, lenv, changes, source, &body)
         }
-    }
+    } else {
+        None
+    };
 
     exit_block_scope(genv);
 
-    param_vtxs
+    BlockResult { param_vtxs, body_last_vtx }
 }
 
 /// Install block parameters and return their vertex IDs

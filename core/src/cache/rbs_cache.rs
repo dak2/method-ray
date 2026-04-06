@@ -30,12 +30,7 @@ pub struct SerializableMethodInfo {
     pub block_param_types: Option<Vec<String>>,
 }
 
-impl SerializableMethodInfo {
-    /// Parse return type string into Type (simple parser for cached data)
-    pub fn return_type(&self) -> crate::types::Type {
-        crate::types::Type::instance(&self.return_type_str)
-    }
-}
+
 
 impl RbsCache {
     /// Get user cache file path (in ~/.cache/methodray/)
@@ -201,7 +196,7 @@ mod tests {
             block_param_types: None,
         };
 
-        let return_type = method_info.return_type();
+        let return_type = crate::rbs::converter::RbsTypeConverter::parse(&method_info.return_type_str);
         assert_eq!(return_type.show(), "String");
     }
 

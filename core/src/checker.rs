@@ -88,7 +88,7 @@ fn load_rbs_from_cache(genv: &mut GlobalEnv) -> Result<()> {
         genv.register_builtin_method_with_block(
             receiver_type,
             &method_info.method_name,
-            method_info.return_type(),
+            RbsTypeConverter::parse(&method_info.return_type_str),
             block_param_types,
         );
     }

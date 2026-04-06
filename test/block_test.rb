@@ -138,4 +138,71 @@ class BlockTest < Minitest::Test
 
     assert_check_error(source, method_name: 'upcase', receiver_type: 'Integer')
   end
+
+  # ============================================
+  # Block Return Type Propagation
+  # ============================================
+
+  def test_map_propagates_block_return_type
+    source = <<~RUBY
+      class Formatter
+        def format
+          result = [1, 2, 3].map { |x| x.to_s }
+          result.first.upcase
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_map_with_integer_return
+    source = <<~RUBY
+      class Counter
+        def count
+          result = ["a", "b"].map { |x| x.length }
+          result.first.even?
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_map_block_return_type_error
+    source = <<~RUBY
+      class Formatter
+        def format
+          result = [1, 2, 3].map { |x| x.to_s }
+          result.first.even?
+        end
+      end
+    RUBY
+
+    assert_check_error(source, method_name: 'even?', receiver_type: 'String')
+  end
+
+  def test_each_does_not_propagate_block_return_type
+    source = <<~RUBY
+      class Processor
+        def process
+          [1, 2, 3].each { |x| x.to_s }
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
+
+  def test_empty_block_body
+    source = <<~RUBY
+      class Processor
+        def process
+          [1, 2, 3].map { |x| }
+        end
+      end
+    RUBY
+
+    assert_no_check_errors(source)
+  end
 end
