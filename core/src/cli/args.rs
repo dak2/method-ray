@@ -25,7 +25,7 @@ pub enum Commands {
         verbose: bool,
     },
 
-    /// Watch a Ruby file and re-check on changes
+    /// [DEPRECATED] Watch a Ruby file and re-check on changes
     Watch {
         /// Ruby file to watch
         #[arg(value_name = "FILE")]

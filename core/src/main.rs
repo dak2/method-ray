@@ -32,6 +32,7 @@ fn main() -> Result<()> {
             }
         }
         Commands::Watch { file } => {
+            eprintln!("WARNING: 'watch' is deprecated and will be removed in a future version.");
             commands::watch_file(&file)?;
         }
         Commands::Version => {
