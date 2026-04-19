@@ -23,13 +23,6 @@ gem install methodray
 bundle exec methodray check app/models/user.rb
 ```
 
-### Watching for File Changes, Re-checking Methods
-
-```bash
-# Watch a file for changes and re-check on save
-bundle exec methodray watch app/models/user.rb
-```
-
 #### Example Usage
 
 `bundle exec methodray check app/models/user.rb`
