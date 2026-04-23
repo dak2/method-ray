@@ -11,7 +11,7 @@ Method-Ray supports Ruby 3.4 or later.
 ## Installation
 
 ```bash
-gem install methodray
+gem install method-ray
 ```
 
 ## Quick Start
