@@ -12,6 +12,7 @@ name = "methodray"
 path = "src/main.rs"
 required-features = ["cli"]
 
+# [DEPRECATED] methodray-lsp will be removed in a future version.
 [[bin]]
 name = "methodray-lsp"
 path = "src/lsp/main.rs"
